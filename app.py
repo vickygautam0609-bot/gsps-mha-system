@@ -485,7 +485,6 @@ def render_reports_tab():
         for i, (noc_key, items) in enumerate(grouped_data.items()):
             noc, dt, org, val, noc_copy = noc_key
             
-            # Uniform styled banner header for all NOCs
             st.markdown(
                 f"""
                 <div style="background-color: #eaf2f8; padding: 10px 15px; border-left: 5px solid #1f538d; border-radius: 4px; margin-bottom: 5px;">
@@ -636,7 +635,37 @@ def render_users_tab():
         st.success(st.session_state.priv_success_msg)
         st.session_state.priv_success_msg = ""
 
+    # --- PASSWORD UPDATE SECTION ---
+    with st.expander("🔑 Update User Passwords", expanded=False):
+        with st.form("update_password_form"):
+            cursor.execute("SELECT username, name, role FROM users")
+            all_users = cursor.fetchall()
+            user_dict = {f"{u[1]} ({u[0]}) - {u[2]}": u[0] for u in all_users}
+            
+            if st.session_state.role == "Administrator":
+                selected_display = st.selectbox("Select User", options=list(user_dict.keys()))
+                target_uname = user_dict[selected_display]
+            else:
+                target_uname = st.session_state.username
+                st.info(f"Updating password for your account: **{st.session_state.name} ({target_uname})**")
+            
+            new_pwd = st.text_input("New Password", type="password")
+            confirm_pwd = st.text_input("Confirm New Password", type="password")
+            
+            update_pwd_btn = st.form_submit_button("🔒 Update Password", use_container_width=True)
+            if update_pwd_btn:
+                if not new_pwd or not confirm_pwd:
+                    st.error("Please fill out both password fields.")
+                elif new_pwd != confirm_pwd:
+                    st.error("Passwords do not match!")
+                else:
+                    cursor.execute("UPDATE users SET password = ? WHERE username = ?", (new_pwd.strip(), target_uname))
+                    conn.commit()
+                    st.success(f"✅ Password for username '{target_uname}' updated successfully!")
+
+    st.markdown("---")
     with st.form("new_user_form"):
+        st.write("### Create New User")
         uc1, uc2, uc3, uc4 = st.columns(4)
         with uc1: new_name = st.text_input("Full Name")
         with uc2: new_uname = st.text_input("Username")
