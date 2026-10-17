@@ -1,5 +1,5 @@
-streamlit
-pandas
-reportlab
-openpyxl
-python-dateutil
+streamlit==1.32.0
+pandas==2.2.1
+reportlab==4.1.0
+openpyxl==3.1.2
+python-dateutil==2.9.0
