@@ -368,15 +368,20 @@ def render_entry_tab():
                 st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
                 if uploaded_file.type == "application/pdf":
                     st.download_button(
-                        "📥 Open / Download Uploaded PDF",
+                        "📥 Download Uploaded PDF",
                         data=uploaded_file.getvalue(),
                         file_name=uploaded_file.name,
                         mime="application/pdf",
                         key="preview_uploaded_pdf"
                     )
                 else:
-                    with st.expander("👁️ Preview Image"):
-                        st.image(uploaded_file, caption=uploaded_file.name, use_container_width=True)
+                    st.download_button(
+                        "📥 Download Uploaded Image",
+                        data=uploaded_file.getvalue(),
+                        file_name=uploaded_file.name,
+                        mime="application/octet-stream",
+                        key="preview_uploaded_img"
+                    )
 
         shared_noc_copy = ""
         if noc_num.strip() and noc_date.strip():
@@ -385,21 +390,16 @@ def render_entry_tab():
         active_file_path = st.session_state.get("f_pdf", "") or shared_noc_copy
 
         if uploaded_file is None and active_file_path and os.path.exists(active_file_path):
-            file_name_lower = active_file_path.lower()
             st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Attached: {os.path.basename(active_file_path)}</span>', unsafe_allow_html=True)
             with open(active_file_path, "rb") as fp:
                 file_bytes = fp.read()
-            if file_name_lower.endswith(".pdf"):
-                st.download_button(
-                    "📥 Open / Download Attached PDF",
-                    data=file_bytes,
-                    file_name=os.path.basename(active_file_path),
-                    mime="application/pdf",
-                    key="preview_attached_pdf"
-                )
-            else:
-                with st.expander("👁️ Preview Attached Document"):
-                    st.image(file_bytes, caption=os.path.basename(active_file_path), use_container_width=True)
+            st.download_button(
+                "📥 Download Attached File",
+                data=file_bytes,
+                file_name=os.path.basename(active_file_path),
+                mime="application/octet-stream",
+                key="preview_attached_file"
+            )
 
         st.markdown("")
         # Action Bar: Save | Fetch Record ID (paired right next to Update) | Update | Clear
@@ -640,26 +640,15 @@ def render_reports_tab():
             )
             
             if noc_copy and os.path.exists(noc_copy):
-                with st.expander("👁️ Preview / Download Attached File"):
-                    file_name_lower = noc_copy.lower()
-                    with open(noc_copy, "rb") as fp:
-                        file_bytes = fp.read()
-                    
-                    if file_name_lower.endswith(".pdf"):
-                        base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
-                        pdf_display = f'<object data="data:application/pdf;base64,{base64_pdf}" type="application/pdf" width="100%" height="500px"><p>Your browser does not support PDF embedding. Please download the file below.</p></object>'
-                        st.markdown(pdf_display, unsafe_allow_html=True)
-                    else:
-                        st.image(file_bytes, caption=os.path.basename(noc_copy), use_container_width=True)
-                    
-                    st.write("")
-                    st.download_button(
-                        "📥 Download Attached File",
-                        data=file_bytes,
-                        file_name=os.path.basename(noc_copy),
-                        mime="application/octet-stream",
-                        key=f"dl_pdf_{i}_{noc}_{dt}"
-                    )
+                with open(noc_copy, "rb") as fp:
+                    file_bytes = fp.read()
+                st.download_button(
+                    "📥 Download Attached File",
+                    data=file_bytes,
+                    file_name=os.path.basename(noc_copy),
+                    mime="application/octet-stream",
+                    key=f"dl_file_{i}_{noc}_{dt}"
+                )
             else:
                 st.caption("*(No file attached for this NOC)*")
 
