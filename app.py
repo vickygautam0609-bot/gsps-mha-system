@@ -277,16 +277,16 @@ def is_expired(noc_date_str, validity_val):
         return False
 
 def reset_form_state():
-    st.session_state.f_noc = ""
-    st.session_state.f_date = ""
-    st.session_state.f_org = ""
-    st.session_state.f_val = 0
-    st.session_state.f_gsps = ""
-    st.session_state.f_reg = ""
-    st.session_state.f_pdf = ""
-    st.session_state.fetch_id_input = ""
-    st.session_state.last_fetched_id = ""
-    st.session_state.upload_reset_counter += 1
+    st.session_state["f_noc"] = ""
+    st.session_state["f_date"] = ""
+    st.session_state["f_org"] = ""
+    st.session_state["f_val"] = 0
+    st.session_state["f_gsps"] = ""
+    st.session_state["f_reg"] = ""
+    st.session_state["f_pdf"] = ""
+    st.session_state["fetch_id_input"] = ""
+    st.session_state["last_fetched_id"] = ""
+    st.session_state["upload_reset_counter"] += 1
 
 
 # ==========================================
