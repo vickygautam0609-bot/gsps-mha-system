@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- STRICT BUTTON-ONLY CLICK & CUSTOM FILE UPLOADER HELPER TEXT CSS ---
+# --- STRICT BUTTON-ONLY CLICK, CUSTOM UPLOAD TEXT & ICON CSS ---
 st.markdown(
     """
     <style>
@@ -37,9 +37,17 @@ st.markdown(
         border-radius: 4px !important;
         padding: 0.35rem 0.75rem !important;
         border: none !important;
+        font-size: 0px !important; /* Hide original text/icon */
     }
     [data-testid="stFileUploader"] section button:hover {
         background-color: #163d6b !important;
+        color: white !important;
+    }
+    /* Inject custom text "UPLOAD" and upload icon onto the button */
+    [data-testid="stFileUploader"] section button::after {
+        content: "📁 UPLOAD" !important;
+        font-size: 13px !important;
+        font-weight: bold !important;
         color: white !important;
     }
     /* Hide markdown container text */
