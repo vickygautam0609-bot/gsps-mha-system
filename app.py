@@ -510,6 +510,9 @@ def render_entry_tab():
             clean_org = org.strip().upper()
             clean_region = region.strip().upper()
 
+            # Parse GSPS list allowing single entries even if trailing comma/newline exists
+            parsed_gsps_list = [g.strip() for g in gsps_num.replace("\n", ",").split(",") if g.strip()]
+
             if not fetch_id.strip() or not fetch_id.strip().isdigit():
                 st.error("⚠️ To update a record, first enter its numeric ID in 'Fetch ID (to Update)' right next to this button and press Enter.")
             elif st.session_state.get("last_fetched_id") != fetch_id.strip():
@@ -519,8 +522,8 @@ def render_entry_tab():
                 st.error("⚠️ Cannot update: Please fix the file attachment errors above.")
             elif not clean_noc_num or not noc_date or not clean_org or not gsps_num or not clean_region:
                 st.error("All mandatory fields must be filled out before updating!")
-            elif "," in gsps_num or "\n" in gsps_num:
-                st.error("Bulk entries with multiple numbers are only allowed when saving new records.")
+            elif len(parsed_gsps_list) > 1:
+                st.error("Bulk entries with multiple numbers are only allowed when saving new records. Please provide a single GSPS number for updates.")
             elif not validate_date(noc_date):
                 st.error("Invalid date format! Use DD.MM.YYYY.")
             elif datetime.strptime(noc_date, "%d.%m.%Y").date() > datetime.now().date():
@@ -529,7 +532,8 @@ def render_entry_tab():
                 st.error("GSPS Number must be exactly 10 digits.")
             else:
                 target_id = int(fetch_id.strip())
-                if check_duplicate(clean_noc_num, noc_date, gsps_num, clean_region, exclude_id=target_id):
+                single_gsps = parsed_gsps_list[0]
+                if check_duplicate(clean_noc_num, noc_date, single_gsps, clean_region, exclude_id=target_id):
                     st.error("Another active record with these details (NOC, Date, GSPS, Region) already exists!")
                 else:
                     old_noc_copy = get_existing_noc_copy(clean_noc_num, noc_date)
@@ -553,7 +557,7 @@ def render_entry_tab():
 
                     cursor.execute(
                         "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, mha_noc_copy = %s, modified_by = %s WHERE record_id = %s",
-                        (clean_noc_num, noc_date, clean_org, str(validity), gsps_num, clean_region, final_pdf_path, st.session_state.name, target_id)
+                        (clean_noc_num, noc_date, clean_org, str(validity), single_gsps, clean_region, final_pdf_path, st.session_state.name, target_id)
                     )
                     
                     st.toast(f"Record ID #{target_id} updated successfully!", icon="✅")
