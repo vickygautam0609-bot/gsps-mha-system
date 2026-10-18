@@ -18,38 +18,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- COMPACT FILE UPLOADER CSS ---
-st.markdown(
-    """
-    <style>
-    /* Shrink file uploader container and layout footprint */
-    [data-testid="stFileUploader"] {
-        max-width: 400px !important;
-    }
-    [data-testid="stFileUploader"] section {
-        padding: 4px 12px !important;
-        min-height: unset !important;
-    }
-    [data-testid="stFileUploader"] section button {
-        background-color: #1f538d !important;
-        color: white !important;
-        border-radius: 4px !important;
-        padding: 0.2rem 0.5rem !important;
-        font-size: 13px !important;
-        border: none !important;
-    }
-    [data-testid="stFileUploader"] section button:hover {
-        background-color: #163d6b !important;
-        color: white !important;
-    }
-    [data-testid="stFileUploader"] small {
-        display: none !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 # --- DIRECTORY SETUP FOR COPIES ---
 UPLOAD_DIR = "uploaded_nocs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -212,7 +180,7 @@ def validate_date(date_str):
 def validate_gsps(gsps_val):
     if not gsps_val:
         return False
-    gsps_list = [g.strip() for g in gsps_val.split(",") if g.strip()]
+    gsps_list = [g.strip() for g in gsps_val.replace("\n", ",").split(",") if g.strip()]
     if not gsps_list:
         return False
     for g in gsps_list:
@@ -287,38 +255,41 @@ def render_entry_tab():
             st.error("Please enter a valid numeric Record ID.")
 
     with st.container():
-        c1, c2, c3, c4, c5, c6 = st.columns(6)
+        # Row 1: NOC Number, NOC Date, Organisation, Validity, Attachment (Upload)
+        c1, c2, c3, c4, c5 = st.columns(5)
 
         with c1: noc_num = st.text_input("NOC Number*", key="f_noc")
         with c2: noc_date = st.text_input("NOC Date (DD.MM.YYYY)*", key="f_date")
         with c3: org = st.text_input("Organisation*", key="f_org")
         with c4: validity = st.number_input("Validity (Yrs)", min_value=0, step=1, format="%d", key="f_val")
-        with c5: gsps_num = st.text_input("GSPS (Comma sep for bulk)*", key="f_gsps")
-        with c6: region = st.text_input("Allowed Region*", key="f_reg")
-
-        # Compact layout row for attachment and file status preview
-        up_col1, up_col2 = st.columns([1, 2])
-        with up_col1:
+        with c5: 
             uploaded_file = st.file_uploader(
                 "Attachment", 
                 type=["pdf", "jpg", "jpeg"], 
                 key=f"pdf_uploader_{st.session_state.upload_reset_counter}"
             )
-        
+
+        # Row 2: GSPS Number with long entry space (text_area)
+        gsps_num = st.text_area("GSPS Number(s) (Comma/Newline sep for bulk)*", key="f_gsps", height=90, placeholder="Enter 10-digit GSPS numbers...")
+
+        # Row 3: Allowed Region (in place of upload)
+        region = st.text_input("Allowed Region*", key="f_reg")
+
         file_oversized = False
         if uploaded_file is not None:
             if uploaded_file.size > 20 * 1024 * 1024:
                 file_oversized = True
-                with up_col2:
-                    st.error("⚠️ File size exceeds the 20 MB limit.")
+                st.error("⚠️ File size exceeds the 20 MB limit. Please upload a smaller file.")
             else:
-                with up_col2:
-                    st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 13px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
+                st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 13px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
                 if uploaded_file.type == "application/pdf":
-                    with st.expander("👁️ Preview PDF Document"):
-                        base64_pdf = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
-                        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="350px" type="application/pdf"></iframe>'
-                        st.markdown(pdf_display, unsafe_allow_html=True)
+                    st.download_button(
+                        "📥 Open / Download Uploaded PDF",
+                        data=uploaded_file.getvalue(),
+                        file_name=uploaded_file.name,
+                        mime="application/pdf",
+                        key="preview_uploaded_pdf"
+                    )
                 else:
                     with st.expander("👁️ Preview Image"):
                         st.image(uploaded_file, caption=uploaded_file.name, use_container_width=True)
@@ -331,20 +302,19 @@ def render_entry_tab():
 
         if uploaded_file is None and active_file_path and os.path.exists(active_file_path):
             file_name_lower = active_file_path.lower()
-            with up_col2:
-                st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 13px;">📎 Attached: {os.path.basename(active_file_path)}</span>', unsafe_allow_html=True)
-            with st.expander("👁️ Preview Attached Document"):
-                with open(active_file_path, "rb") as fp:
-                    file_bytes = fp.read()
-                if file_name_lower.endswith(".pdf"):
-                    st.download_button(
-                        "📥 Open / Download Attached PDF",
-                        data=file_bytes,
-                        file_name=os.path.basename(active_file_path),
-                        mime="application/pdf",
-                        key="preview_attached_pdf"
-                    )
-                else:
+            st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 13px;">📎 Attached: {os.path.basename(active_file_path)}</span>', unsafe_allow_html=True)
+            with open(active_file_path, "rb") as fp:
+                file_bytes = fp.read()
+            if file_name_lower.endswith(".pdf"):
+                st.download_button(
+                    "📥 Open / Download Attached PDF",
+                    data=file_bytes,
+                    file_name=os.path.basename(active_file_path),
+                    mime="application/pdf",
+                    key="preview_attached_pdf"
+                )
+            else:
+                with st.expander("👁️ Preview Attached Document"):
                     st.image(file_bytes, caption=os.path.basename(active_file_path), use_container_width=True)
 
         st.write("")
@@ -380,7 +350,7 @@ def render_entry_tab():
             elif not validate_gsps(gsps_num):
                 st.error("Each GSPS number must be exactly 10 digits.")
             else:
-                gsps_list = [g.strip() for g in gsps_num.split(",") if g.strip()]
+                gsps_list = [g.strip() for g in gsps_num.replace("\n", ",").split(",") if g.strip()]
                 if len(gsps_list) != len(set(gsps_list)):
                     st.error("Duplicate GSPS numbers found in bulk list.")
                 else:
@@ -416,8 +386,8 @@ def render_entry_tab():
                 st.error("⚠️ Cannot update: Uploaded file exceeds the 20 MB limit.")
             elif not noc_num or not noc_date or not org or not gsps_num or not region:
                 st.error("All mandatory fields must be filled out before updating!")
-            elif "," in gsps_num:
-                st.error("Bulk comma entries are only allowed when saving new records.")
+            elif "," in gsps_num or "\n" in gsps_num:
+                st.error("Bulk entries with multiple numbers are only allowed when saving new records.")
             elif not validate_date(noc_date):
                 st.error("Invalid date format! Use DD.MM.YYYY.")
             elif datetime.strptime(noc_date, "%d.%m.%Y").date() > datetime.now().date():
@@ -561,20 +531,22 @@ def render_reports_tab():
                         file_bytes = fp.read()
                     
                     if file_name_lower.endswith(".pdf"):
-                        base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
-                        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="450px" type="application/pdf"></iframe>'
-                        st.markdown(pdf_display, unsafe_allow_html=True)
+                        st.download_button(
+                            "📥 Open / Download PDF File",
+                            data=file_bytes,
+                            file_name=os.path.basename(noc_copy),
+                            mime="application/pdf",
+                            key=f"dl_pdf_{i}_{noc}_{dt}"
+                        )
                     else:
                         st.image(file_bytes, caption=os.path.basename(noc_copy), use_container_width=True)
-                    
-                    st.write("")
-                    st.download_button(
-                        "📥 Download File",
-                        data=file_bytes,
-                        file_name=os.path.basename(noc_copy),
-                        mime="application/octet-stream",
-                        key=f"dl_pdf_{i}_{noc}_{dt}"
-                    )
+                        st.download_button(
+                            "📥 Download Image",
+                            data=file_bytes,
+                            file_name=os.path.basename(noc_copy),
+                            mime="application/octet-stream",
+                            key=f"dl_img_{i}_{noc}_{dt}"
+                        )
             else:
                 st.caption("*(No file attached for this NOC)*")
 
