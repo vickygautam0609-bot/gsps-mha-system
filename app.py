@@ -46,13 +46,13 @@ st.markdown(
     [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] {
         display: none !important;
     }
-    /* Replace default size limit message with 'Max 20mb , jpg pdf' */
+    /* Replace default size limit message with 'Max 5mb , jpg pdf' */
     [data-testid="stFileUploader"] small {
         visibility: hidden !important;
         position: relative !important;
     }
     [data-testid="stFileUploader"] small::after {
-        content: "Max 20mb , jpg pdf" !important;
+        content: "Max 5mb , jpg pdf" !important;
         visibility: visible !important;
         position: absolute !important;
         left: 0 !important;
@@ -324,9 +324,10 @@ def render_entry_tab():
 
         file_oversized = False
         if uploaded_file is not None:
-            if uploaded_file.size > 20 * 1024 * 1024:
+            # 5 MB restriction check (5 * 1024 * 1024 bytes)
+            if uploaded_file.size > 5 * 1024 * 1024:
                 file_oversized = True
-                st.error("⚠️ File size exceeds the 20 MB limit. Please upload a smaller file.")
+                st.error("⚠️ File size exceeds the 5 MB limit. Please upload a smaller file.")
             else:
                 st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 13px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
                 if uploaded_file.type == "application/pdf":
@@ -387,7 +388,7 @@ def render_entry_tab():
             if fetch_id.strip():
                 st.error("⚠️ Please clear the 'Fetch by Record ID' field or click Clear before saving a new entry.")
             elif file_oversized:
-                st.error("⚠️ Cannot save: Uploaded file exceeds the 20 MB limit.")
+                st.error("⚠️ Cannot save: Uploaded file exceeds the 5 MB limit.")
             elif not noc_num or not noc_date or not org or not gsps_num or not region:
                 st.error("All mandatory fields must be filled out before saving or uploading a file!")
             elif not validate_date(noc_date):
@@ -430,7 +431,7 @@ def render_entry_tab():
             if not fetch_id.strip() or not fetch_id.isdigit():
                 st.error("Please enter a valid numeric Record ID in 'Fetch by Record ID' above to update.")
             elif file_oversized:
-                st.error("⚠️ Cannot update: Uploaded file exceeds the 20 MB limit.")
+                st.error("⚠️ Cannot update: Uploaded file exceeds the 5 MB limit.")
             elif not noc_num or not noc_date or not org or not gsps_num or not region:
                 st.error("All mandatory fields must be filled out before updating!")
             elif "," in gsps_num or "\n" in gsps_num:
