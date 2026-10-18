@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- STRICT BUTTON-ONLY CLICK & CUSTOM FILE UPLOADER HELPER TEXT CSS ---
+# --- STRICT BUTTON-ONLY CLICK, HELPER TEXT & BLUE BUTTONS CSS ---
 st.markdown(
     """
     <style>
@@ -59,6 +59,16 @@ st.markdown(
         top: 0 !important;
         color: #555 !important;
         font-size: 11px !important;
+    }
+    /* Style form/action buttons blue */
+    div.stButton > button {
+        background-color: #1f538d !important;
+        color: white !important;
+        border: none !important;
+    }
+    div.stButton > button:hover {
+        background-color: #163d6b !important;
+        color: white !important;
     }
     </style>
     """,
@@ -319,7 +329,7 @@ def render_entry_tab():
 
     # --- STRUCTURED FORM CONTAINER ---
     with st.container():
-        st.markdown("##### 📄 NOC Information & Metadata")
+        st.markdown("##### 📄 MHA NOC Information")
         col1, col2 = st.columns(2)
         with col1:
             noc_num = st.text_input("NOC Number*", key="f_noc", placeholder="e.g., 11016/...")
@@ -329,7 +339,7 @@ def render_entry_tab():
             validity = st.number_input("Validity (Years)", min_value=0, step=1, format="%d", key="f_val")
 
         st.markdown("")
-        st.markdown("##### 📡 GSPS Numbers & Operational Region")
+        st.markdown("##### 📡 GSPS Numbers and Permitted Restricted Areas")
         gsps_num = st.text_area("GSPS Number(s) (Comma or Newline separated for bulk entry)*", key="f_gsps", height=110, placeholder="Enter 10-digit GSPS numbers...")
         region = st.text_input("Allowed Region*", key="f_reg", placeholder="e.g., Pan India / North Zone")
 
