@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- STRICT BUTTON-ONLY CLICK, CUSTOM UPLOAD TEXT & SIZE TAG CSS ---
+# --- STRICT BUTTON-ONLY CLICK, CUSTOM UPLOAD TEXT & HIDE DEFAULT SIZE LIMIT CSS ---
 st.markdown(
     """
     <style>
@@ -55,22 +55,9 @@ st.markdown(
     [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] {
         display: none !important;
     }
-    /* Display custom tag below upload button */
+    /* Completely hide default size limit message */
     [data-testid="stFileUploader"] small {
-        visibility: hidden !important;
-        position: relative !important;
-        display: block !important;
-    }
-    [data-testid="stFileUploader"] small::after {
-        content: "File Size limit 5 mb , jpeg & pdf" !important;
-        visibility: visible !important;
-        position: absolute !important;
-        left: 0 !important;
-        top: 0 !important;
-        color: #555 !important;
-        font-size: 11px !important;
-        font-weight: 500 !important;
-        white-space: nowrap !important;
+        display: none !important;
     }
     /* Style form/action buttons blue */
     div.stButton > button {
@@ -184,6 +171,7 @@ if "f_val" not in st.session_state: st.session_state.f_val = 0
 if "f_gsps" not in st.session_state: st.session_state.f_gsps = ""
 if "f_reg" not in st.session_state: st.session_state.f_reg = ""
 if "f_pdf" not in st.session_state: st.session_state.f_pdf = ""
+if "fetch_id_input" not in st.session_state: st.session_state.fetch_id_input = ""
 if "upload_reset_counter" not in st.session_state: st.session_state.upload_reset_counter = 0
 if "last_fetched_id" not in st.session_state: st.session_state.last_fetched_id = ""
 if "priv_success_msg" not in st.session_state: st.session_state.priv_success_msg = ""
@@ -294,8 +282,9 @@ def is_expired(noc_date_str, validity_val):
 def reset_form_state():
     for k in ["f_noc", "f_date", "f_org", "f_val", "f_gsps", "f_reg", "f_pdf", "fetch_id_input"]:
         if k in st.session_state:
-            del st.session_state[k]
+            st.session_state[k] = "" if isinstance(st.session_state[k], str) else 0
     st.session_state.f_val = 0
+    st.session_state.fetch_id_input = ""
     st.session_state.last_fetched_id = ""
     st.session_state.upload_reset_counter += 1
 
