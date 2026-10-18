@@ -127,7 +127,8 @@ cursor.execute("""
         p_entry INTEGER DEFAULT 1,
         p_reports INTEGER DEFAULT 1,
         p_trash INTEGER DEFAULT 1,
-        p_users INTEGER DEFAULT 0
+        p_users INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'ACTIVE'
     )
 """)
 
@@ -139,17 +140,19 @@ if "p_entry" not in user_cols:
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS p_reports INTEGER DEFAULT 1")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS p_trash INTEGER DEFAULT 1")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS p_users INTEGER DEFAULT 0")
+if "status" not in user_cols:
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ACTIVE'")
 
 # Insert default admin user if table is empty, and ensure admin always has User Management privilege locked on
 cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'ADMIN'")
 if cursor.fetchone()[0] == 0:
     cursor.execute(
-        "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users) VALUES (%s, %s, %s, %s, 1, 1, 1, 1)",
+        "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users, status) VALUES (%s, %s, %s, %s, 1, 1, 1, 1, 'ACTIVE')",
         ("Administrator", "ADMIN", "admin123", "Administrator"),
     )
 else:
     cursor.execute(
-        "UPDATE users SET p_users = 1, role = 'Administrator' WHERE username = 'ADMIN'"
+        "UPDATE users SET p_users = 1, role = 'Administrator', status = 'ACTIVE' WHERE username = 'ADMIN'"
     )
 
 # --- SESSION STATE INITIALIZATION ---
@@ -177,6 +180,15 @@ for key, default_val in [
     if key not in st.session_state:
         st.session_state[key] = default_val
 
+# --- SECURITY CHECK: DROP ACTIVE SESSIONS IF MARKED INACTIVE ---
+if st.session_state.logged_in:
+    cursor.execute("SELECT status FROM users WHERE username = %s", (st.session_state.username,))
+    u_status_row = cursor.fetchone()
+    if not u_status_row or u_status_row[0] != 'ACTIVE':
+        st.session_state.logged_in = False
+        st.error("⚠️ Your account has been deactivated by an administrator. Session terminated.")
+        st.stop()
+
 # ==========================================
 # AUTHENTICATION / LOGIN SCREEN
 # ==========================================
@@ -192,20 +204,23 @@ if not st.session_state.logged_in:
             submit = st.form_submit_button("Login", use_container_width=True)
             
             if submit:
-                cursor.execute("SELECT name, role, username, p_entry, p_reports, p_trash, p_users FROM users WHERE username = %s AND password = %s", (uname, pwd.strip()))
+                cursor.execute("SELECT name, role, username, p_entry, p_reports, p_trash, p_users, status FROM users WHERE username = %s AND password = %s", (uname, pwd.strip()))
                 user = cursor.fetchone()
                 if user:
-                    st.session_state.logged_in = True
-                    st.session_state.name = user[0]
-                    st.session_state.role = user[1]
-                    st.session_state.username = user[2]
-                    
-                    st.session_state.p_entry = user[3]
-                    st.session_state.p_reports = user[4]
-                    st.session_state.p_trash = user[5]
-                    st.session_state.p_users = 1 if user[1] == 'Administrator' else user[6]
-                    st.toast(f"Welcome back, {user[0]}!", icon="👋")
-                    st.rerun()
+                    if user[7] != 'ACTIVE':
+                        st.error("⚠️ Your account is inactive. Please contact the administrator.")
+                    else:
+                        st.session_state.logged_in = True
+                        st.session_state.name = user[0]
+                        st.session_state.role = user[1]
+                        st.session_state.username = user[2]
+                        
+                        st.session_state.p_entry = user[3]
+                        st.session_state.p_reports = user[4]
+                        st.session_state.p_trash = user[5]
+                        st.session_state.p_users = 1 if user[1] == 'Administrator' else user[6]
+                        st.toast(f"Welcome back, {user[0]}!", icon="👋")
+                        st.rerun()
                 else:
                     st.error("Invalid username or password!")
     st.stop()
@@ -765,7 +780,6 @@ def render_trash_tab():
 def render_users_tab():
     st.subheader("User Management & Access Privileges")
 
-    # Handle clearing form fields on successful user creation via session state counter increment
     user_counter = st.session_state.get("new_user_counter", 0)
 
     # --- PASSWORD UPDATE SECTION ---
@@ -817,7 +831,6 @@ def render_users_tab():
             if not new_name.strip() or not clean_uname or not new_pwd.strip():
                 st.error("All user fields are required!")
             else:
-                # Check for duplicate uppercase username in database
                 cursor.execute("SELECT COUNT(*) FROM users WHERE username = %s", (clean_uname,))
                 if cursor.fetchone()[0] > 0:
                     st.error(f"⚠️ Username '{clean_uname}' already exists. Please choose a different username.")
@@ -827,7 +840,7 @@ def render_users_tab():
                             p_users = True
 
                         cursor.execute(
-                            "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                            "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users, status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'ACTIVE')",
                             (new_name.strip(), clean_uname, new_pwd.strip(), new_role, int(p_entry), int(p_reports), int(p_trash), int(p_users))
                         )
                         st.toast(f"User '{clean_uname}' created successfully!", icon="✅")
@@ -837,8 +850,8 @@ def render_users_tab():
                         st.error(f"Error creating user: {e}")
 
     st.markdown("---")
-    st.write("### Existing Users & Privilege Overview")
-    cursor.execute("SELECT user_id, name, username, role, p_entry, p_reports, p_trash, p_users FROM users")
+    st.write("### Existing Users & Status Overview")
+    cursor.execute("SELECT user_id, name, username, role, p_entry, p_reports, p_trash, p_users, status FROM users")
     users_rows = cursor.fetchall()
     
     if users_rows:
@@ -846,7 +859,7 @@ def render_users_tab():
         for ur in users_rows:
             is_admin = (ur[3] == "Administrator" or ur[2] == "ADMIN")
             users_data.append({
-                "Delete": False,
+                "Select": False,
                 "User ID": ur[0],
                 "Name": ur[1],
                 "Username": ur[2],
@@ -854,7 +867,8 @@ def render_users_tab():
                 "Entry": bool(ur[4]),
                 "Reports": bool(ur[5]),
                 "Trash": bool(ur[6]),
-                "Users": True if is_admin else bool(ur[7])
+                "Users": True if is_admin else bool(ur[7]),
+                "Status": ur[8]
             })
         df_users = pd.DataFrame(users_data)
         
@@ -862,11 +876,19 @@ def render_users_tab():
             df_users,
             hide_index=True,
             use_container_width=True,
-            disabled=["User ID", "Name", "Username", "Role"],
+            disabled=["User ID", "Name", "Username", "Role", "Status"],
             key="users_editor"
         )
         
-        if st.button("💾 Save Privilege Changes", key="save_privs_btn"):
+        col_s1, col_s2, col_s3 = st.columns(3)
+        with col_s1:
+            save_privs_btn = st.button("💾 Save Privilege Changes", key="save_privs_btn")
+        with col_s2:
+            activate_btn = st.button("🔓 Activate Selected", key="activate_users_btn")
+        with col_s3:
+            deactivate_btn = st.button("🔒 Deactivate Selected", type="primary", key="deactivate_users_btn")
+
+        if save_privs_btn:
             validation_error = False
             for idx, row in edited_users.iterrows():
                 role = row["Role"]
@@ -912,24 +934,33 @@ def render_users_tab():
                 st.toast("User privileges updated successfully!", icon="✅")
                 st.rerun()
 
-        st.write("")
-        admin_selected = edited_users[(edited_users["Delete"] == True) & ((edited_users["Role"] == "Administrator") | (edited_users["Username"] == "ADMIN"))]
-        
-        if not admin_selected.empty:
-            st.error("⚠️ Administrator accounts cannot be selected for deletion!")
-        
-        valid_to_del = edited_users[(edited_users["Delete"] == True) & (edited_users["Role"] != "Administrator") & (edited_users["Username"] != "ADMIN")]
-        users_to_del = valid_to_del["Username"].tolist()
+        selected_users = edited_users[edited_users["Select"] == True]
+        users_to_mod = selected_users["Username"].tolist()
 
-        if users_to_del:
-            if st.button("🗑️ Delete Selected Users", type="primary", key="del_users_btn"):
-                for u in users_to_del:
-                    if u == st.session_state.username:
-                        st.error("You cannot delete your own active account.")
-                    else:
-                        cursor.execute("DELETE FROM users WHERE username = %s", (u,))
-                st.toast("Selected user(s) deleted.", icon="🗑️")
+        if activate_btn:
+            if not users_to_mod:
+                st.warning("Please select at least one user to activate.")
+            else:
+                for u in users_to_mod:
+                    cursor.execute("UPDATE users SET status = 'ACTIVE' WHERE username = %s", (u,))
+                st.toast("Selected user(s) activated successfully!", icon="✅")
                 st.rerun()
+
+        if deactivate_btn:
+            if not users_to_mod:
+                st.warning("Please select at least one user to deactivate.")
+            else:
+                admin_included = any(u in ["ADMIN"] or edited_users.loc[edited_users["Username"] == u, "Role"].values[0] == "Administrator" for u in users_to_mod)
+                if admin_included:
+                    st.error("⚠️ Administrator accounts cannot be deactivated!")
+                else:
+                    for u in users_to_mod:
+                        if u == st.session_state.username:
+                            st.error("You cannot deactivate your own active account.")
+                        else:
+                            cursor.execute("UPDATE users SET status = 'INACTIVE' WHERE username = %s", (u,))
+                    st.toast("Selected user(s) deactivated.", icon="🔒")
+                    st.rerun()
 
 
 # ==========================================
