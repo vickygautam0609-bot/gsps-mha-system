@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- STRICT BUTTON-ONLY CLICK, CUSTOM UPLOAD TEXT & ICON CSS ---
+# --- STRICT BUTTON-ONLY CLICK & HIDE DEFAULT 200MB SIZE LIMIT TEXT CSS ---
 st.markdown(
     """
     <style>
@@ -54,19 +54,9 @@ st.markdown(
     [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] {
         display: none !important;
     }
-    /* Replace default size limit message with 'Max 5mb , jpg pdf' */
+    /* Completely hide default size limit message ('Limit 200MB per file...') */
     [data-testid="stFileUploader"] small {
-        visibility: hidden !important;
-        position: relative !important;
-    }
-    [data-testid="stFileUploader"] small::after {
-        content: "Max 5mb , jpg pdf" !important;
-        visibility: visible !important;
-        position: absolute !important;
-        left: 0 !important;
-        top: 0 !important;
-        color: #555 !important;
-        font-size: 11px !important;
+        display: none !important;
     }
     /* Style form/action buttons blue */
     div.stButton > button {
