@@ -22,17 +22,25 @@ st.set_page_config(
 UPLOAD_DIR = "uploaded_nocs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# --- DATABASE SETUP (SUPABASE POSTGRESQL - PSYCOPG 3) ---
+# --- DATABASE SETUP (SUPABASE POSTGRESQL - SAFE DEBUGGER) ---
 @st.cache_resource
 def get_db_connection():
     db_url = st.secrets["SUPABASE_DB_URL"]
-    # Ensure sslmode is present for cloud environments
     if "sslmode" not in db_url:
         separator = "&" if "?" in db_url else "?"
         db_url = f"{db_url}{separator}sslmode=require"
         
-    conn = psycopg.connect(db_url, autocommit=True)
-    return conn
+    try:
+        conn = psycopg.connect(db_url, autocommit=True)
+        return conn
+    except Exception as e:
+        st.error("🚨 **Database Connection Error!**")
+        st.markdown("Please check your **Streamlit Secrets (`SUPABASE_DB_URL`)**. Common fixes:")
+        st.markdown("1. Ensure you removed any square brackets `[]` around your password.")
+        st.markdown("2. Ensure you are using the **Session Pooler** URI from Supabase (Port `6543`).")
+        st.markdown("3. Check if your password contains special characters that need URL encoding.")
+        st.code(f"Technical Error: {e}", language="text")
+        st.stop()
 
 conn = get_db_connection()
 cursor = conn.cursor()
