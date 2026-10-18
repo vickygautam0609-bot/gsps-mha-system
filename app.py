@@ -18,6 +18,41 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- STRICT BUTTON-ONLY CLICK FILE UPLOADER CSS ---
+st.markdown(
+    """
+    <style>
+    /* Disable clicks on the entire drag-and-drop dropzone box/row */
+    [data-testid="stFileUploader"] section {
+        pointer-events: none !important;
+        background-color: transparent !important;
+        border: none !important;
+        padding: 0px !important;
+    }
+    /* Enable clicks strictly on the inner browse/upload button */
+    [data-testid="stFileUploader"] section button {
+        pointer-events: auto !important;
+        background-color: #1f538d !important;
+        color: white !important;
+        border-radius: 4px !important;
+        padding: 0.35rem 0.75rem !important;
+        border: none !important;
+    }
+    [data-testid="stFileUploader"] section button:hover {
+        background-color: #163d6b !important;
+        color: white !important;
+    }
+    /* Hide all helper texts, drag and drop text, and size limit messages around the button */
+    [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"],
+    [data-testid="stFileUploader"] small,
+    [data-testid="stFileUploader"] div[data-testid="stText"] {
+        display: none !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # --- DIRECTORY SETUP FOR COPIES ---
 UPLOAD_DIR = "uploaded_nocs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -255,7 +290,7 @@ def render_entry_tab():
             st.error("Please enter a valid numeric Record ID.")
 
     with st.container():
-        # Row 1: NOC Number, NOC Date, Organisation, Validity, Attachment (Upload)
+        # Row 1: NOC Number, NOC Date, Organisation, Validity, Browse (Attachment)
         c1, c2, c3, c4, c5 = st.columns(5)
 
         with c1: noc_num = st.text_input("NOC Number*", key="f_noc")
@@ -264,7 +299,7 @@ def render_entry_tab():
         with c4: validity = st.number_input("Validity (Yrs)", min_value=0, step=1, format="%d", key="f_val")
         with c5: 
             uploaded_file = st.file_uploader(
-                "Attachment", 
+                "Browse", 
                 type=["pdf", "jpg", "jpeg"], 
                 key=f"pdf_uploader_{st.session_state.upload_reset_counter}"
             )
@@ -272,7 +307,7 @@ def render_entry_tab():
         # Row 2: GSPS Number with long entry space (text_area)
         gsps_num = st.text_area("GSPS Number(s) (Comma/Newline sep for bulk)*", key="f_gsps", height=90, placeholder="Enter 10-digit GSPS numbers...")
 
-        # Row 3: Allowed Region (in place of upload)
+        # Row 3: Allowed Region
         region = st.text_input("Allowed Region*", key="f_reg")
 
         file_oversized = False
@@ -531,22 +566,20 @@ def render_reports_tab():
                         file_bytes = fp.read()
                     
                     if file_name_lower.endswith(".pdf"):
-                        st.download_button(
-                            "📥 Open / Download PDF File",
-                            data=file_bytes,
-                            file_name=os.path.basename(noc_copy),
-                            mime="application/pdf",
-                            key=f"dl_pdf_{i}_{noc}_{dt}"
-                        )
+                        base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
+                        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="450px" type="application/pdf"></iframe>'
+                        st.markdown(pdf_display, unsafe_allow_html=True)
                     else:
                         st.image(file_bytes, caption=os.path.basename(noc_copy), use_container_width=True)
-                        st.download_button(
-                            "📥 Download Image",
-                            data=file_bytes,
-                            file_name=os.path.basename(noc_copy),
-                            mime="application/octet-stream",
-                            key=f"dl_img_{i}_{noc}_{dt}"
-                        )
+                    
+                    st.write("")
+                    st.download_button(
+                        "📥 Download File",
+                        data=file_bytes,
+                        file_name=os.path.basename(noc_copy),
+                        mime="application/octet-stream",
+                        key=f"dl_pdf_{i}_{noc}_{dt}"
+                    )
             else:
                 st.caption("*(No file attached for this NOC)*")
 
