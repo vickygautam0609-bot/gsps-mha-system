@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- STRICT BUTTON-ONLY CLICK, CUSTOM UPLOAD TEXT & HIDE DEFAULT 200MB SIZE LIMIT CSS ---
+# --- STRICT BUTTON-ONLY CLICK, CUSTOM UPLOAD TEXT & SIZE TAG CSS ---
 st.markdown(
     """
     <style>
@@ -44,7 +44,7 @@ st.markdown(
         background-color: #163d6b !important;
         color: white !important;
     }
-    /* Inject custom text "UPLOAD" and upload icon onto the button */
+    /* Inject custom text "UPLOAD" onto the button */
     [data-testid="stFileUploader"] section button::after {
         content: "📁 UPLOAD" !important;
         font-size: 13px !important;
@@ -55,9 +55,22 @@ st.markdown(
     [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] {
         display: none !important;
     }
-    /* Completely hide default size limit message */
+    /* Display custom tag below upload button */
     [data-testid="stFileUploader"] small {
-        display: none !important;
+        visibility: hidden !important;
+        position: relative !important;
+        display: block !important;
+    }
+    [data-testid="stFileUploader"] small::after {
+        content: "File Size limit 5 mb , jpeg & pdf" !important;
+        visibility: visible !important;
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        color: #555 !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+        white-space: nowrap !important;
     }
     /* Style form/action buttons blue */
     div.stButton > button {
@@ -346,7 +359,7 @@ def render_entry_tab():
             region = st.text_input("Allowed Region*", key="f_reg", placeholder="Pan India / North")
         with r_col2:
             uploaded_file = st.file_uploader(
-                "Document Attachment (Max 5MB)", 
+                "Document Attachment", 
                 type=["pdf", "jpg", "jpeg"], 
                 key=f"pdf_uploader_{st.session_state.upload_reset_counter}"
             )
