@@ -18,19 +18,16 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- STRICT BUTTON-ONLY CLICK & HIDE DEFAULT 200MB SIZE LIMIT TEXT CSS ---
+# --- STRICT BUTTON-ONLY CLICK & REMOVE SIZE LIMIT TEXT CSS ---
 st.markdown(
     """
     <style>
-    /* Disable clicks on the entire drag-and-drop dropzone box/row */
-    [data-testid="stFileUploader"] section {
+    /* Disable pointer events on the entire file uploader dropzone container */
+    [data-testid="stFileUploader"] {
         pointer-events: none !important;
-        background-color: transparent !important;
-        border: none !important;
-        padding: 0px !important;
     }
-    /* Enable clicks strictly on the inner browse/upload button */
-    [data-testid="stFileUploader"] section button {
+    /* Re-enable pointer events strictly on the upload button */
+    [data-testid="stFileUploader"] button {
         pointer-events: auto !important;
         background-color: #1f538d !important;
         color: white !important;
@@ -39,23 +36,22 @@ st.markdown(
         border: none !important;
         font-size: 0px !important; /* Hide original text/icon */
     }
-    [data-testid="stFileUploader"] section button:hover {
+    [data-testid="stFileUploader"] button:hover {
         background-color: #163d6b !important;
         color: white !important;
     }
     /* Inject custom text "UPLOAD" and upload icon onto the button */
-    [data-testid="stFileUploader"] section button::after {
+    [data-testid="stFileUploader"] button::after {
         content: "📁 UPLOAD" !important;
         font-size: 13px !important;
         font-weight: bold !important;
         color: white !important;
     }
-    /* Hide markdown container text */
-    [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] {
-        display: none !important;
-    }
-    /* Completely hide default size limit message ('Limit 200MB per file...') */
-    [data-testid="stFileUploader"] small {
+    /* Completely hide all instructions, drag-drop text, and size limit labels */
+    [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"],
+    [data-testid="stFileUploader"] small,
+    [data-testid="stFileUploader"] div[data-testid="stText"],
+    [data-testid="stFileUploader"] span {
         display: none !important;
     }
     /* Style form/action buttons blue */
