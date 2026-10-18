@@ -268,15 +268,6 @@ def is_expired(noc_date_str, validity_val):
     except ValueError:
         return False
 
-def get_pdf_download_link(file_path, button_label):
-    if file_path and os.path.exists(file_path):
-        with open(file_path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode("utf-8")
-        filename = os.path.basename(file_path)
-        href = f'<a href="data:application/pdf;base64,{b64}" target="_blank" style="display:inline-block; padding:0.4rem 0.8rem; background-color:#1f538d; color:white; border-radius:4px; text-decoration:none; font-weight:bold; font-size:14px;">{button_label}</a>'
-        return href
-    return ""
-
 
 # ==========================================
 # TAB BUILDER FUNCTIONS
@@ -343,8 +334,13 @@ def render_entry_tab():
             else:
                 st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 13px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
                 if uploaded_file.type == "application/pdf":
-                    b64_up = base64.b64encode(uploaded_file.getvalue()).decode("utf-8")
-                    st.markdown(f'<a href="data:application/pdf;base64,{b64_up}" target="_blank" style="display:inline-block; padding:0.4rem 0.8rem; background-color:#1f538d; color:white; border-radius:4px; text-decoration:none; font-weight:bold; font-size:13px;">👁️ Open PDF in New Tab</a>', unsafe_allow_html=True)
+                    st.download_button(
+                        "📥 Download / View Uploaded PDF",
+                        data=uploaded_file.getvalue(),
+                        file_name=uploaded_file.name,
+                        mime="application/pdf",
+                        key="preview_uploaded_pdf"
+                    )
                 else:
                     with st.expander("👁️ Preview Image"):
                         st.image(uploaded_file, caption=uploaded_file.name, use_container_width=True)
@@ -361,8 +357,13 @@ def render_entry_tab():
             with open(active_file_path, "rb") as fp:
                 file_bytes = fp.read()
             if file_name_lower.endswith(".pdf"):
-                b64_att = base64.b64encode(file_bytes).decode("utf-8")
-                st.markdown(f'<a href="data:application/pdf;base64,{b64_att}" target="_blank" style="display:inline-block; padding:0.4rem 0.8rem; background-color:#1f538d; color:white; border-radius:4px; text-decoration:none; font-weight:bold; font-size:13px;">👁️ Open PDF in New Tab</a>', unsafe_allow_html=True)
+                st.download_button(
+                    "📥 Download / View Attached PDF",
+                    data=file_bytes,
+                    file_name=os.path.basename(active_file_path),
+                    mime="application/pdf",
+                    key="preview_attached_pdf"
+                )
             else:
                 with st.expander("👁️ Preview Attached Document"):
                     st.image(file_bytes, caption=os.path.basename(active_file_path), use_container_width=True)
@@ -575,14 +576,19 @@ def render_reports_tab():
             )
             
             if noc_copy and os.path.exists(noc_copy):
-                with st.expander("👁️ Preview / Download Attached File"):
+                with st.expander("👁️ Download / View Attached File"):
                     file_name_lower = noc_copy.lower()
                     with open(noc_copy, "rb") as fp:
                         file_bytes = fp.read()
                     
                     if file_name_lower.endswith(".pdf"):
-                        b64_rep = base64.b64encode(file_bytes).decode("utf-8")
-                        st.markdown(f'<a href="data:application/pdf;base64,{b64_rep}" target="_blank" style="display:inline-block; padding:0.4rem 0.8rem; background-color:#1f538d; color:white; border-radius:4px; text-decoration:none; font-weight:bold; font-size:14px;">👁️ Open PDF in New Tab</a>', unsafe_allow_html=True)
+                        st.download_button(
+                            "📥 Download / View PDF File",
+                            data=file_bytes,
+                            file_name=os.path.basename(noc_copy),
+                            mime="application/pdf",
+                            key=f"dl_pdf_{i}_{noc}_{dt}"
+                        )
                     else:
                         st.image(file_bytes, caption=os.path.basename(noc_copy), use_container_width=True)
                         st.write("")
