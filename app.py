@@ -647,14 +647,14 @@ def render_reports_tab():
                     
                     if file_name_lower.endswith(".pdf"):
                         base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
-                        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="450px" type="application/pdf"></iframe>'
+                        pdf_display = f'<object data="data:application/pdf;base64,{base64_pdf}" type="application/pdf" width="100%" height="500px"><p>Your browser does not support PDF embedding. Please download the file below.</p></object>'
                         st.markdown(pdf_display, unsafe_allow_html=True)
                     else:
                         st.image(file_bytes, caption=os.path.basename(noc_copy), use_container_width=True)
                     
                     st.write("")
                     st.download_button(
-                        "📥 Download File",
+                        "📥 Download Attached File",
                         data=file_bytes,
                         file_name=os.path.basename(noc_copy),
                         mime="application/octet-stream",
