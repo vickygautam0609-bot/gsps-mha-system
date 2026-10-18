@@ -18,22 +18,16 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- COMPACT BUTTON-ONLY CLICK & FILE UPLOADER CSS ---
+# --- STRICT BUTTON-ONLY CLICK & CUSTOM FILE UPLOADER HELPER TEXT CSS ---
 st.markdown(
     """
     <style>
-    /* Reduce vertical footprint of the file uploader container */
-    [data-testid="stFileUploader"] {
-        padding: 0px !important;
-        margin-bottom: 0px !important;
-    }
     /* Disable clicks on the entire drag-and-drop dropzone box/row */
     [data-testid="stFileUploader"] section {
         pointer-events: none !important;
         background-color: transparent !important;
         border: none !important;
         padding: 0px !important;
-        min-height: unset !important;
     }
     /* Enable clicks strictly on the inner browse/upload button */
     [data-testid="stFileUploader"] section button {
@@ -41,8 +35,7 @@ st.markdown(
         background-color: #1f538d !important;
         color: white !important;
         border-radius: 4px !important;
-        padding: 0.25rem 0.6rem !important;
-        font-size: 13px !important;
+        padding: 0.35rem 0.75rem !important;
         border: none !important;
     }
     [data-testid="stFileUploader"] section button:hover {
@@ -65,7 +58,7 @@ st.markdown(
         left: 0 !important;
         top: 0 !important;
         color: #555 !important;
-        font-size: 10px !important;
+        font-size: 11px !important;
     }
     /* Style form/action buttons blue */
     div.stButton > button {
@@ -347,14 +340,26 @@ def render_entry_tab():
 
         st.markdown("**GSPS Numbers and Permitted Restricted Areas**")
         gsps_num = st.text_area("GSPS Number(s) (Comma/Newline sep)*", key="f_gsps", height=65, placeholder="Enter 10-digit GSPS numbers...")
-        region = st.text_input("Allowed Region*", key="f_reg", placeholder="e.g., Pan India / North Zone")
 
-        st.markdown("**Document Attachment (Max 5MB)**")
-        uploaded_file = st.file_uploader(
-            "Browse", 
-            type=["pdf", "jpg", "jpeg"], 
-            key=f"pdf_uploader_{st.session_state.upload_reset_counter}"
-        )
+        # Parallel Row for Allowed Region, Attachment, and Action Buttons
+        r_col1, r_col2, r_col3, r_col4, r_col5 = st.columns([2, 2, 1.2, 1.2, 1.2])
+        with r_col1:
+            region = st.text_input("Allowed Region*", key="f_reg", placeholder="Pan India / North")
+        with r_col2:
+            uploaded_file = st.file_uploader(
+                "Browse", 
+                type=["pdf", "jpg", "jpeg"], 
+                key=f"pdf_uploader_{st.session_state.upload_reset_counter}"
+            )
+        with r_col3:
+            st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+            save_btn = st.button("💾 Save New Record(s)", use_container_width=True)
+        with r_col4:
+            st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+            update_btn = st.button("✏️ Update Record", use_container_width=True)
+        with r_col5:
+            st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+            clear_btn = st.button("🔄 Clear / Reset", use_container_width=True)
 
         file_error = False
         if uploaded_file is not None:
@@ -364,7 +369,7 @@ def render_entry_tab():
                 st.error("⚠️ Error: Only PDF and JPG/JPEG files are allowed.")
             elif uploaded_file.size > 5 * 1024 * 1024:
                 file_error = True
-                st.error("⚠️ Error: File size exceeds the 5 MB limit.")
+                st.error("⚠️ Error: File size exceeds the 5 MB limit. Please attach a smaller file.")
             else:
                 st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
                 if uploaded_file.type == "application/pdf":
@@ -401,16 +406,6 @@ def render_entry_tab():
             else:
                 with st.expander("👁️ Preview Attached Document"):
                     st.image(file_bytes, caption=os.path.basename(active_file_path), use_container_width=True)
-
-        st.markdown("---")
-        # Action Buttons Bar
-        b1, b2, b3 = st.columns([1, 1, 1])
-        with b1:
-            save_btn = st.button("💾 Save New Record(s)", use_container_width=True)
-        with b2:
-            update_btn = st.button("✏️ Update Record", use_container_width=True)
-        with b3:
-            clear_btn = st.button("🔄 Clear / Reset Fields", use_container_width=True)
 
         if clear_btn:
             reset_form_state()
