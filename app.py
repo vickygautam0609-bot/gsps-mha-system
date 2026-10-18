@@ -165,6 +165,7 @@ if "f_pdf" not in st.session_state: st.session_state.f_pdf = ""
 if "upload_reset_counter" not in st.session_state: st.session_state.upload_reset_counter = 0
 if "last_fetched_id" not in st.session_state: st.session_state.last_fetched_id = ""
 if "priv_success_msg" not in st.session_state: st.session_state.priv_success_msg = ""
+if "entry_success_msg" not in st.session_state: st.session_state.entry_success_msg = ""
 
 # ==========================================
 # AUTHENTICATION / LOGIN SCREEN
@@ -268,6 +269,14 @@ def is_expired(noc_date_str, validity_val):
     except ValueError:
         return False
 
+def reset_form_state():
+    for k in ["f_noc", "f_date", "f_org", "f_val", "f_gsps", "f_reg", "f_pdf", "fetch_id_input"]:
+        if k in st.session_state:
+            del st.session_state[k]
+    st.session_state.f_val = 0
+    st.session_state.last_fetched_id = ""
+    st.session_state.upload_reset_counter += 1
+
 
 # ==========================================
 # TAB BUILDER FUNCTIONS
@@ -275,6 +284,10 @@ def is_expired(noc_date_str, validity_val):
 def render_entry_tab():
     st.subheader("Record Entry & Management")
     
+    if st.session_state.entry_success_msg:
+        st.success(st.session_state.entry_success_msg)
+        st.session_state.entry_success_msg = ""
+
     col_fetch, col_clear_space = st.columns([2, 6])
     with col_fetch:
         fetch_id = st.text_input("Fetch by Record ID", placeholder="Enter ID...", key="fetch_id_input")
@@ -335,7 +348,7 @@ def render_entry_tab():
                 st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 13px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
                 if uploaded_file.type == "application/pdf":
                     st.download_button(
-                        "📥 Download / View Uploaded PDF",
+                        "📥 Open / Download Uploaded PDF",
                         data=uploaded_file.getvalue(),
                         file_name=uploaded_file.name,
                         mime="application/pdf",
@@ -358,7 +371,7 @@ def render_entry_tab():
                 file_bytes = fp.read()
             if file_name_lower.endswith(".pdf"):
                 st.download_button(
-                    "📥 Download / View Attached PDF",
+                    "📥 Open / Download Attached PDF",
                     data=file_bytes,
                     file_name=os.path.basename(active_file_path),
                     mime="application/pdf",
@@ -378,12 +391,7 @@ def render_entry_tab():
             clear_btn = st.button("🔄 Clear / Reset Fields", use_container_width=True)
 
         if clear_btn:
-            for k in ["f_noc", "f_date", "f_org", "f_val", "f_gsps", "f_reg", "f_pdf", "fetch_id_input"]:
-                if k in st.session_state:
-                    del st.session_state[k]
-            st.session_state.f_val = 0
-            st.session_state.last_fetched_id = ""
-            st.session_state.upload_reset_counter += 1
+            reset_form_state()
             st.success("Form cleared successfully!")
             st.rerun()
 
@@ -412,6 +420,7 @@ def render_entry_tab():
                             conflict = True
                             break
                     if not conflict:
+                        old_noc_copy = get_existing_noc_copy(noc_num, noc_date)
                         final_pdf_path = shared_noc_copy
                         if uploaded_file is not None and not file_error:
                             safe_noc = noc_num.replace("/", "_").replace("\\", "_")
@@ -419,6 +428,14 @@ def render_entry_tab():
                             ext = os.path.splitext(uploaded_file.name)[1].lower()
                             filename = f"NOC_{safe_noc}_{safe_date}{ext}"
                             final_pdf_path = os.path.join(UPLOAD_DIR, filename)
+                            
+                            # Delete old attachment if a new different file is uploaded to save space
+                            if old_noc_copy and os.path.exists(old_noc_copy) and os.path.abspath(old_noc_copy) != os.path.abspath(final_pdf_path):
+                                try:
+                                    os.remove(old_noc_copy)
+                                except Exception:
+                                    pass
+
                             with open(final_pdf_path, "wb") as f:
                                 f.write(uploaded_file.getbuffer())
                             st.session_state.f_pdf = final_pdf_path
@@ -428,7 +445,10 @@ def render_entry_tab():
                                 "INSERT INTO n_records (mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, mha_noc_copy, status, created_by, modified_by) VALUES (%s, %s, %s, %s, %s, %s, %s, 'ACTIVE', %s, %s)",
                                 (noc_num, noc_date, org, str(validity), g, region, final_pdf_path, st.session_state.name, st.session_state.name)
                             )
-                        st.success(f"✅ Confirmation: Successfully saved {len(gsps_list)} new record(s) for NOC '{noc_num}'!")
+                        
+                        st.session_state.entry_success_msg = f"✅ Confirmation: Successfully saved {len(gsps_list)} new record(s) for NOC '{noc_num}'!"
+                        reset_form_state()
+                        st.rerun()
 
         if update_btn:
             if not fetch_id.strip() or not fetch_id.isdigit():
@@ -450,6 +470,7 @@ def render_entry_tab():
                 if check_duplicate(noc_num, noc_date, gsps_num, region, exclude_id=target_id):
                     st.error("Another active record with these details (NOC, Date, GSPS, Region) already exists!")
                 else:
+                    old_noc_copy = get_existing_noc_copy(noc_num, noc_date)
                     final_pdf_path = shared_noc_copy
                     if uploaded_file is not None and not file_error:
                         safe_noc = noc_num.replace("/", "_").replace("\\", "_")
@@ -457,6 +478,14 @@ def render_entry_tab():
                         ext = os.path.splitext(uploaded_file.name)[1].lower()
                         filename = f"NOC_{safe_noc}_{safe_date}{ext}"
                         final_pdf_path = os.path.join(UPLOAD_DIR, filename)
+                        
+                        # Delete old attachment if a new different file is uploaded to save space
+                        if old_noc_copy and os.path.exists(old_noc_copy) and os.path.abspath(old_noc_copy) != os.path.abspath(final_pdf_path):
+                            try:
+                                os.remove(old_noc_copy)
+                            except Exception:
+                                pass
+
                         with open(final_pdf_path, "wb") as f:
                             f.write(uploaded_file.getbuffer())
                         st.session_state.f_pdf = final_pdf_path
@@ -465,7 +494,10 @@ def render_entry_tab():
                         "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, mha_noc_copy = %s, modified_by = %s WHERE record_id = %s",
                         (noc_num, noc_date, org, str(validity), gsps_num, region, final_pdf_path, st.session_state.name, target_id)
                     )
-                    st.success(f"✅ Confirmation: Record ID #{target_id} updated successfully!")
+                    
+                    st.session_state.entry_success_msg = f"✅ Confirmation: Record ID #{target_id} updated successfully!"
+                    reset_form_state()
+                    st.rerun()
 
     st.markdown("---")
     st.subheader("Active Records View")
@@ -576,29 +608,26 @@ def render_reports_tab():
             )
             
             if noc_copy and os.path.exists(noc_copy):
-                with st.expander("👁️ Download / View Attached File"):
+                with st.expander("👁️ Preview / Download Attached File"):
                     file_name_lower = noc_copy.lower()
                     with open(noc_copy, "rb") as fp:
                         file_bytes = fp.read()
                     
                     if file_name_lower.endswith(".pdf"):
-                        st.download_button(
-                            "📥 Download / View PDF File",
-                            data=file_bytes,
-                            file_name=os.path.basename(noc_copy),
-                            mime="application/pdf",
-                            key=f"dl_pdf_{i}_{noc}_{dt}"
-                        )
+                        base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
+                        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="450px" type="application/pdf"></iframe>'
+                        st.markdown(pdf_display, unsafe_allow_html=True)
                     else:
                         st.image(file_bytes, caption=os.path.basename(noc_copy), use_container_width=True)
-                        st.write("")
-                        st.download_button(
-                            "📥 Download Image",
-                            data=file_bytes,
-                            file_name=os.path.basename(noc_copy),
-                            mime="application/octet-stream",
-                            key=f"dl_img_{i}_{noc}_{dt}"
-                        )
+                    
+                    st.write("")
+                    st.download_button(
+                        "📥 Download File",
+                        data=file_bytes,
+                        file_name=os.path.basename(noc_copy),
+                        mime="application/octet-stream",
+                        key=f"dl_pdf_{i}_{noc}_{dt}"
+                    )
             else:
                 st.caption("*(No file attached for this NOC)*")
 
