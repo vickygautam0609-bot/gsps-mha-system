@@ -18,6 +18,38 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- COMPACT FILE UPLOADER CSS ---
+st.markdown(
+    """
+    <style>
+    /* Shrink file uploader container and layout footprint */
+    [data-testid="stFileUploader"] {
+        max-width: 400px !important;
+    }
+    [data-testid="stFileUploader"] section {
+        padding: 4px 12px !important;
+        min-height: unset !important;
+    }
+    [data-testid="stFileUploader"] section button {
+        background-color: #1f538d !important;
+        color: white !important;
+        border-radius: 4px !important;
+        padding: 0.2rem 0.5rem !important;
+        font-size: 13px !important;
+        border: none !important;
+    }
+    [data-testid="stFileUploader"] section button:hover {
+        background-color: #163d6b !important;
+        color: white !important;
+    }
+    [data-testid="stFileUploader"] small {
+        display: none !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # --- DIRECTORY SETUP FOR COPIES ---
 UPLOAD_DIR = "uploaded_nocs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -264,27 +296,29 @@ def render_entry_tab():
         with c5: gsps_num = st.text_input("GSPS (Comma sep for bulk)*", key="f_gsps")
         with c6: region = st.text_input("Allowed Region*", key="f_reg")
 
-        uploaded_file = st.file_uploader(
-            "Attachment", 
-            type=["pdf", "jpg", "jpeg"], 
-            key=f"pdf_uploader_{st.session_state.upload_reset_counter}"
-        )
+        # Compact layout row for attachment and file status preview
+        up_col1, up_col2 = st.columns([1, 2])
+        with up_col1:
+            uploaded_file = st.file_uploader(
+                "Attachment", 
+                type=["pdf", "jpg", "jpeg"], 
+                key=f"pdf_uploader_{st.session_state.upload_reset_counter}"
+            )
         
         file_oversized = False
         if uploaded_file is not None:
             if uploaded_file.size > 20 * 1024 * 1024:
                 file_oversized = True
-                st.error("⚠️ File size exceeds the 20 MB limit. Please upload a smaller file.")
+                with up_col2:
+                    st.error("⚠️ File size exceeds the 20 MB limit.")
             else:
-                st.markdown(f'<span style="color: #1f538d; font-weight: bold;">📎 Uploaded File: {uploaded_file.name}</span>', unsafe_allow_html=True)
+                with up_col2:
+                    st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 13px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
                 if uploaded_file.type == "application/pdf":
-                    st.download_button(
-                        "📥 Open / Download Uploaded PDF",
-                        data=uploaded_file.getvalue(),
-                        file_name=uploaded_file.name,
-                        mime="application/pdf",
-                        key="preview_uploaded_pdf"
-                    )
+                    with st.expander("👁️ Preview PDF Document"):
+                        base64_pdf = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+                        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="350px" type="application/pdf"></iframe>'
+                        st.markdown(pdf_display, unsafe_allow_html=True)
                 else:
                     with st.expander("👁️ Preview Image"):
                         st.image(uploaded_file, caption=uploaded_file.name, use_container_width=True)
@@ -297,19 +331,20 @@ def render_entry_tab():
 
         if uploaded_file is None and active_file_path and os.path.exists(active_file_path):
             file_name_lower = active_file_path.lower()
-            st.markdown(f'<span style="color: #1f538d; font-weight: bold;">📎 Attached File: {os.path.basename(active_file_path)}</span>', unsafe_allow_html=True)
-            with open(active_file_path, "rb") as fp:
-                file_bytes = fp.read()
-            if file_name_lower.endswith(".pdf"):
-                st.download_button(
-                    "📥 Open / Download Attached PDF",
-                    data=file_bytes,
-                    file_name=os.path.basename(active_file_path),
-                    mime="application/pdf",
-                    key="preview_attached_pdf"
-                )
-            else:
-                with st.expander("👁️ Preview Image"):
+            with up_col2:
+                st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 13px;">📎 Attached: {os.path.basename(active_file_path)}</span>', unsafe_allow_html=True)
+            with st.expander("👁️ Preview Attached Document"):
+                with open(active_file_path, "rb") as fp:
+                    file_bytes = fp.read()
+                if file_name_lower.endswith(".pdf"):
+                    st.download_button(
+                        "📥 Open / Download Attached PDF",
+                        data=file_bytes,
+                        file_name=os.path.basename(active_file_path),
+                        mime="application/pdf",
+                        key="preview_attached_pdf"
+                    )
+                else:
                     st.image(file_bytes, caption=os.path.basename(active_file_path), use_container_width=True)
 
         st.write("")
@@ -520,27 +555,25 @@ def render_reports_tab():
             )
             
             if noc_copy and os.path.exists(noc_copy):
-                file_name_lower = noc_copy.lower()
-                with open(noc_copy, "rb") as fp:
-                    file_bytes = fp.read()
-                
-                if file_name_lower.endswith(".pdf"):
-                    st.download_button(
-                        "📥 Open / Download PDF File",
-                        data=file_bytes,
-                        file_name=os.path.basename(noc_copy),
-                        mime="application/pdf",
-                        key=f"dl_pdf_{i}_{noc}_{dt}"
-                    )
-                else:
-                    with st.expander("👁️ Preview Image"):
+                with st.expander("👁️ Preview / Download Attached File"):
+                    file_name_lower = noc_copy.lower()
+                    with open(noc_copy, "rb") as fp:
+                        file_bytes = fp.read()
+                    
+                    if file_name_lower.endswith(".pdf"):
+                        base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
+                        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="450px" type="application/pdf"></iframe>'
+                        st.markdown(pdf_display, unsafe_allow_html=True)
+                    else:
                         st.image(file_bytes, caption=os.path.basename(noc_copy), use_container_width=True)
+                    
+                    st.write("")
                     st.download_button(
-                        "📥 Download Image",
+                        "📥 Download File",
                         data=file_bytes,
                         file_name=os.path.basename(noc_copy),
                         mime="application/octet-stream",
-                        key=f"dl_img_{i}_{noc}_{dt}"
+                        key=f"dl_pdf_{i}_{noc}_{dt}"
                     )
             else:
                 st.caption("*(No file attached for this NOC)*")
