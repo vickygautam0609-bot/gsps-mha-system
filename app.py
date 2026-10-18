@@ -141,15 +141,15 @@ if "p_entry" not in user_cols:
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS p_users INTEGER DEFAULT 0")
 
 # Insert default admin user if table is empty, and ensure admin always has User Management privilege locked on
-cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
+cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'ADMIN'")
 if cursor.fetchone()[0] == 0:
     cursor.execute(
         "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users) VALUES (%s, %s, %s, %s, 1, 1, 1, 1)",
-        ("Administrator", "admin", "admin123", "Administrator"),
+        ("Administrator", "ADMIN", "admin123", "Administrator"),
     )
 else:
     cursor.execute(
-        "UPDATE users SET p_users = 1, role = 'Administrator' WHERE username = 'admin'"
+        "UPDATE users SET p_users = 1, role = 'Administrator' WHERE username = 'ADMIN'"
     )
 
 # --- SESSION STATE INITIALIZATION ---
@@ -168,7 +168,11 @@ for key, default_val in [
     ("f_val", 0), ("f_gsps", ""), ("f_reg", ""), 
     ("f_pdf", ""), ("fetch_id_input", ""), 
     ("last_fetched_id", ""), 
-    ("upload_reset_counter", 0), ("trigger_reset", False)
+    ("upload_reset_counter", 0), ("trigger_reset", False),
+    ("new_user_name", ""), ("new_user_uname", ""), ("new_user_pwd", ""),
+    ("new_user_role", "Basic User"), ("new_p_entry", True), 
+    ("new_p_reports", True), ("new_p_trash", True), ("new_p_users", False),
+    ("new_user_counter", 0)
 ]:
     if key not in st.session_state:
         st.session_state[key] = default_val
@@ -183,12 +187,12 @@ if not st.session_state.logged_in:
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         with st.form("login_form"):
-            uname = st.text_input("Username")
+            uname = st.text_input("Username").strip().upper()
             pwd = st.text_input("Password", type="password")
             submit = st.form_submit_button("Login", use_container_width=True)
             
             if submit:
-                cursor.execute("SELECT name, role, username, p_entry, p_reports, p_trash, p_users FROM users WHERE username = %s AND password = %s", (uname.strip(), pwd.strip()))
+                cursor.execute("SELECT name, role, username, p_entry, p_reports, p_trash, p_users FROM users WHERE username = %s AND password = %s", (uname, pwd.strip()))
                 user = cursor.fetchone()
                 if user:
                     st.session_state.logged_in = True
@@ -761,6 +765,9 @@ def render_trash_tab():
 def render_users_tab():
     st.subheader("User Management & Access Privileges")
 
+    # Handle clearing form fields on successful user creation via session state counter increment
+    user_counter = st.session_state.get("new_user_counter", 0)
+
     # --- PASSWORD UPDATE SECTION ---
     with st.expander("🔑 Update User Passwords", expanded=False):
         with st.form("update_password_form"):
@@ -789,11 +796,11 @@ def render_users_tab():
                     st.toast(f"Password for username '{target_uname}' updated successfully!", icon="🔒")
 
     st.markdown("---")
-    with st.form("new_user_form"):
+    with st.form(f"new_user_form_{user_counter}"):
         st.write("### Create New User")
         uc1, uc2, uc3, uc4 = st.columns(4)
         with uc1: new_name = st.text_input("Full Name")
-        with uc2: new_uname = st.text_input("Username")
+        with uc2: new_uname = st.text_input("Username (Saved in UPPERCASE)")
         with uc3: new_pwd = st.text_input("Password", type="password")
         with uc4: new_role = st.selectbox("Role", ["Administrator", "Basic User"])
         
@@ -806,21 +813,28 @@ def render_users_tab():
         
         create_user_btn = st.form_submit_button("➕ Create User", use_container_width=True)
         if create_user_btn:
-            if not new_name or not new_uname or not new_pwd:
+            clean_uname = new_uname.strip().upper()
+            if not new_name.strip() or not clean_uname or not new_pwd.strip():
                 st.error("All user fields are required!")
             else:
-                try:
-                    if new_role == "Administrator":
-                        p_users = True
+                # Check for duplicate uppercase username in database
+                cursor.execute("SELECT COUNT(*) FROM users WHERE username = %s", (clean_uname,))
+                if cursor.fetchone()[0] > 0:
+                    st.error(f"⚠️ Username '{clean_uname}' already exists. Please choose a different username.")
+                else:
+                    try:
+                        if new_role == "Administrator":
+                            p_users = True
 
-                    cursor.execute(
-                        "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                        (new_name, new_uname, new_pwd, new_role, int(p_entry), int(p_reports), int(p_trash), int(p_users))
-                    )
-                    st.toast(f"User '{new_uname}' created successfully!", icon="👤")
-                    st.rerun()
-                except psycopg.IntegrityError:
-                    st.error(f"Username '{new_uname}' already exists.")
+                        cursor.execute(
+                            "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                            (new_name.strip(), clean_uname, new_pwd.strip(), new_role, int(p_entry), int(p_reports), int(p_trash), int(p_users))
+                        )
+                        st.toast(f"User '{clean_uname}' created successfully!", icon="✅")
+                        st.session_state["new_user_counter"] += 1
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error creating user: {e}")
 
     st.markdown("---")
     st.write("### Existing Users & Privilege Overview")
@@ -830,7 +844,7 @@ def render_users_tab():
     if users_rows:
         users_data = []
         for ur in users_rows:
-            is_admin = (ur[3] == "Administrator" or ur[2] == "admin")
+            is_admin = (ur[3] == "Administrator" or ur[2] == "ADMIN")
             users_data.append({
                 "Delete": False,
                 "User ID": ur[0],
@@ -857,7 +871,7 @@ def render_users_tab():
             for idx, row in edited_users.iterrows():
                 role = row["Role"]
                 uname = row["Username"]
-                is_admin = (role == "Administrator" or uname == "admin")
+                is_admin = (role == "Administrator" or uname == "ADMIN")
                 
                 if is_admin and not row["Users"]:
                     validation_error = True
@@ -871,7 +885,7 @@ def render_users_tab():
                     uname = row["Username"]
                     role = row["Role"]
                     
-                    if uname == 'admin' or role == 'Administrator':
+                    if uname == 'ADMIN' or role == 'Administrator':
                         e = 1 if row["Entry"] else 0
                         r = 1 if row["Reports"] else 0
                         t = 1 if row["Trash"] else 0
@@ -899,12 +913,12 @@ def render_users_tab():
                 st.rerun()
 
         st.write("")
-        admin_selected = edited_users[(edited_users["Delete"] == True) & ((edited_users["Role"] == "Administrator") | (edited_users["Username"] == "admin"))]
+        admin_selected = edited_users[(edited_users["Delete"] == True) & ((edited_users["Role"] == "Administrator") | (edited_users["Username"] == "ADMIN"))]
         
         if not admin_selected.empty:
             st.error("⚠️ Administrator accounts cannot be selected for deletion!")
         
-        valid_to_del = edited_users[(edited_users["Delete"] == True) & (edited_users["Role"] != "Administrator") & (edited_users["Username"] != "admin")]
+        valid_to_del = edited_users[(edited_users["Delete"] == True) & (edited_users["Role"] != "Administrator") & (edited_users["Username"] != "ADMIN")]
         users_to_del = valid_to_del["Username"].tolist()
 
         if users_to_del:
