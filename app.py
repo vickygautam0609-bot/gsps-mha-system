@@ -322,12 +322,17 @@ def render_entry_tab():
         # Row 3: Allowed Region
         region = st.text_input("Allowed Region*", key="f_reg")
 
-        file_oversized = False
+        file_error = False
         if uploaded_file is not None:
-            # 5 MB restriction check (5 * 1024 * 1024 bytes)
-            if uploaded_file.size > 5 * 1024 * 1024:
-                file_oversized = True
-                st.error("⚠️ File size exceeds the 5 MB limit. Please upload a smaller file.")
+            file_ext = os.path.splitext(uploaded_file.name)[1].lower()
+            # Validate type strictly
+            if file_ext not in [".pdf", ".jpg", ".jpeg"]:
+                file_error = True
+                st.error("⚠️ Error: Only PDF and JPG/JPEG files are allowed.")
+            # Validate size strictly (Max 5 MB = 5 * 1024 * 1024 bytes)
+            elif uploaded_file.size > 5 * 1024 * 1024:
+                file_error = True
+                st.error("⚠️ Error: File size exceeds the 5 MB limit. Please attach a smaller file.")
             else:
                 st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 13px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
                 if uploaded_file.type == "application/pdf":
@@ -387,8 +392,8 @@ def render_entry_tab():
         if save_btn:
             if fetch_id.strip():
                 st.error("⚠️ Please clear the 'Fetch by Record ID' field or click Clear before saving a new entry.")
-            elif file_oversized:
-                st.error("⚠️ Cannot save: Uploaded file exceeds the 5 MB limit.")
+            elif file_error:
+                st.error("⚠️ Cannot save: Please fix the file attachment errors above.")
             elif not noc_num or not noc_date or not org or not gsps_num or not region:
                 st.error("All mandatory fields must be filled out before saving or uploading a file!")
             elif not validate_date(noc_date):
@@ -410,7 +415,7 @@ def render_entry_tab():
                             break
                     if not conflict:
                         final_pdf_path = shared_noc_copy
-                        if uploaded_file is not None:
+                        if uploaded_file is not None and not file_error:
                             safe_noc = noc_num.replace("/", "_").replace("\\", "_")
                             safe_date = noc_date.replace(".", "_")
                             ext = os.path.splitext(uploaded_file.name)[1].lower()
@@ -430,8 +435,8 @@ def render_entry_tab():
         if update_btn:
             if not fetch_id.strip() or not fetch_id.isdigit():
                 st.error("Please enter a valid numeric Record ID in 'Fetch by Record ID' above to update.")
-            elif file_oversized:
-                st.error("⚠️ Cannot update: Uploaded file exceeds the 5 MB limit.")
+            elif file_error:
+                st.error("⚠️ Cannot update: Please fix the file attachment errors above.")
             elif not noc_num or not noc_date or not org or not gsps_num or not region:
                 st.error("All mandatory fields must be filled out before updating!")
             elif "," in gsps_num or "\n" in gsps_num:
@@ -448,7 +453,7 @@ def render_entry_tab():
                     st.error("Another active record with these details (NOC, Date, GSPS, Region) already exists!")
                 else:
                     final_pdf_path = shared_noc_copy
-                    if uploaded_file is not None:
+                    if uploaded_file is not None and not file_error:
                         safe_noc = noc_num.replace("/", "_").replace("\\", "_")
                         safe_date = noc_date.replace(".", "_")
                         ext = os.path.splitext(uploaded_file.name)[1].lower()
