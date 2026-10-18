@@ -168,7 +168,6 @@ for key, default_val in [
     ("f_val", 0), ("f_gsps", ""), ("f_reg", ""), 
     ("f_pdf", ""), ("fetch_id_input", ""), 
     ("last_fetched_id", ""), 
-    ("fetch_status_msg", None), ("priv_success_msg", ""), 
     ("upload_reset_counter", 0), ("trigger_reset", False)
 ]:
     if key not in st.session_state:
@@ -201,6 +200,7 @@ if not st.session_state.logged_in:
                     st.session_state.p_reports = user[4]
                     st.session_state.p_trash = user[5]
                     st.session_state.p_users = 1 if user[1] == 'Administrator' else user[6]
+                    st.toast(f"Welcome back, {user[0]}!", icon="👋")
                     st.rerun()
                 else:
                     st.error("Invalid username or password!")
@@ -284,7 +284,6 @@ def on_fetch_id_change():
     fetch_val = st.session_state.get("fetch_id_input", "").strip()
     if not fetch_val:
         st.session_state["last_fetched_id"] = ""
-        st.session_state["fetch_status_msg"] = None
         return
     if fetch_val.isdigit():
         target_id = int(fetch_val)
@@ -294,9 +293,9 @@ def on_fetch_id_change():
         )
         fetched_data = cursor.fetchone()
         if not fetched_data:
-            st.session_state["fetch_status_msg"] = ("warning", f"⚠️ Record ID #{target_id} does not exist.")
+            st.toast(f"⚠️ Record ID #{target_id} does not exist.", icon="⚠️")
         elif fetched_data[7] == 'DELETED':
-            st.session_state["fetch_status_msg"] = ("warning", f"⚠️ Record ID #{target_id} is already deleted.")
+            st.toast(f"⚠️ Record ID #{target_id} is already deleted.", icon="⚠️")
         else:
             st.session_state["f_noc"] = fetched_data[0]
             st.session_state["f_date"] = fetched_data[1]
@@ -306,9 +305,9 @@ def on_fetch_id_change():
             st.session_state["f_reg"] = fetched_data[5]
             st.session_state["f_pdf"] = fetched_data[6] if fetched_data[6] else ""
             st.session_state["last_fetched_id"] = fetch_val
-            st.session_state["fetch_status_msg"] = ("success", f"✅ Record ID #{target_id} loaded! Modify fields above and click 'Update Record'.")
+            st.toast(f"Record ID #{target_id} loaded! Modify fields above and click 'Update Record'.", icon="✅")
     else:
-        st.session_state["fetch_status_msg"] = ("error", "⚠️ Please enter a valid numeric Record ID.")
+        st.toast("⚠️ Please enter a valid numeric Record ID.", icon="⚠️")
 
 
 # ==========================================
@@ -326,20 +325,10 @@ def render_entry_tab():
         st.session_state["f_pdf"] = ""
         st.session_state["fetch_id_input"] = ""
         st.session_state["last_fetched_id"] = ""
-        st.session_state["fetch_status_msg"] = None
         st.session_state["upload_reset_counter"] += 1
         st.session_state["trigger_reset"] = False
 
     st.subheader("Record Entry & Management")
-
-    if st.session_state.get("fetch_status_msg"):
-        msg_type, msg_text = st.session_state["fetch_status_msg"]
-        if msg_type == "success":
-            st.success(msg_text)
-        elif msg_type == "warning":
-            st.warning(msg_text)
-        else:
-            st.error(msg_text)
 
     # --- COMPACT STRUCTURED FORM CONTAINER ---
     with st.container():
@@ -591,7 +580,7 @@ def render_entry_tab():
             if st.button("🗑️ Delete Selected Records", type="primary", key="del_active_btn"):
                 for r_id in selected_to_delete:
                     cursor.execute("UPDATE n_records SET status = 'DELETED', modified_by = %s WHERE record_id = %s", (st.session_state.name, r_id))
-                st.success(f"Successfully moved {len(selected_to_delete)} record(s) to Deleted Records.")
+                st.toast(f"Successfully moved {len(selected_to_delete)} record(s) to Deleted Records.", icon="🗑️")
                 st.rerun()
     else:
         st.info("No active records found matching criteria.")
@@ -774,7 +763,7 @@ def render_trash_tab():
             if st.button("♻️ Restore Selected Records", key="restore_btn_trash"):
                 for r_id in to_restore:
                     cursor.execute("UPDATE n_records SET status = 'ACTIVE', modified_by = %s WHERE record_id = %s", (st.session_state.name, r_id))
-                st.success(f"Successfully restored {len(to_restore)} record(s)!")
+                st.toast(f"Successfully restored {len(to_restore)} record(s)!", icon="♻️")
                 st.rerun()
     else:
         st.info("Trash archive is empty.")
@@ -782,10 +771,6 @@ def render_trash_tab():
 
 def render_users_tab():
     st.subheader("User Management & Access Privileges")
-    
-    if st.session_state.priv_success_msg:
-        st.success(st.session_state.priv_success_msg)
-        st.session_state.priv_success_msg = ""
 
     # --- PASSWORD UPDATE SECTION ---
     with st.expander("🔑 Update User Passwords", expanded=False):
@@ -812,7 +797,7 @@ def render_users_tab():
                     st.error("Passwords do not match!")
                 else:
                     cursor.execute("UPDATE users SET password = %s WHERE username = %s", (new_pwd.strip(), target_uname))
-                    st.success(f"✅ Password for username '{target_uname}' updated successfully!")
+                    st.toast(f"Password for username '{target_uname}' updated successfully!", icon="🔒")
 
     st.markdown("---")
     with st.form("new_user_form"):
@@ -843,7 +828,7 @@ def render_users_tab():
                         "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                         (new_name, new_uname, new_pwd, new_role, int(p_entry), int(p_reports), int(p_trash), int(p_users))
                     )
-                    st.success(f"User '{new_uname}' created successfully!")
+                    st.toast(f"User '{new_uname}' created successfully!", icon="👤")
                     st.rerun()
                 except psycopg.IntegrityError:
                     st.error(f"Username '{new_uname}' already exists.")
@@ -921,7 +906,7 @@ def render_users_tab():
                     st.session_state.p_trash = p_row[2]
                     st.session_state.p_users = 1 if st.session_state.role == 'Administrator' else p_row[3]
 
-                st.session_state.priv_success_msg = "✅ Confirmation: User privileges updated successfully!"
+                st.toast("User privileges updated successfully!", icon="✅")
                 st.rerun()
 
         st.write("")
@@ -940,7 +925,7 @@ def render_users_tab():
                         st.error("You cannot delete your own active account.")
                     else:
                         cursor.execute("DELETE FROM users WHERE username = %s", (u,))
-                st.success("Selected user(s) deleted.")
+                st.toast("Selected user(s) deleted.", icon="🗑️")
                 st.rerun()
 
 
