@@ -25,8 +25,13 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # --- DATABASE SETUP (SUPABASE POSTGRESQL - PSYCOPG 3) ---
 @st.cache_resource
 def get_db_connection():
-    # Connects securely using Streamlit Secrets with explicit sslmode
-    conn = psycopg.connect(st.secrets["SUPABASE_DB_URL"], autocommit=True)
+    db_url = st.secrets["SUPABASE_DB_URL"]
+    # Ensure sslmode is present for cloud environments
+    if "sslmode" not in db_url:
+        separator = "&" if "?" in db_url else "?"
+        db_url = f"{db_url}{separator}sslmode=require"
+        
+    conn = psycopg.connect(db_url, autocommit=True)
     return conn
 
 conn = get_db_connection()
