@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- STRICT BUTTON-ONLY CLICK, CUSTOM UPLOAD TEXT & HIDE DEFAULT SIZE LIMIT CSS ---
+# --- STRICT BUTTON-ONLY CLICK, CUSTOM UPLOAD TEXT & SIZE TAG CSS ---
 st.markdown(
     """
     <style>
@@ -55,9 +55,22 @@ st.markdown(
     [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] {
         display: none !important;
     }
-    /* Completely hide default size limit message */
+    /* Display custom tag below upload button */
     [data-testid="stFileUploader"] small {
-        display: none !important;
+        visibility: hidden !important;
+        position: relative !important;
+        display: block !important;
+    }
+    [data-testid="stFileUploader"] small::after {
+        content: "File Size limit 5 mb , jpeg & pdf" !important;
+        visibility: visible !important;
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        color: #555 !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+        white-space: nowrap !important;
     }
     /* Style form/action buttons blue */
     div.stButton > button {
@@ -163,13 +176,13 @@ if "logged_in" not in st.session_state:
     st.session_state.p_trash = 1
     st.session_state.p_users = 0
 
-# Form fields session state initialization
 for key, default_val in [
     ("f_noc", ""), ("f_date", ""), ("f_org", ""), 
     ("f_val", 0), ("f_gsps", ""), ("f_reg", ""), 
     ("f_pdf", ""), ("fetch_id_input", ""), 
     ("last_fetched_id", ""), ("entry_success_msg", ""),
-    ("priv_success_msg", ""), ("upload_reset_counter", 0)
+    ("priv_success_msg", ""), ("upload_reset_counter", 0),
+    ("trigger_reset", False)
 ]:
     if key not in st.session_state:
         st.session_state[key] = default_val
@@ -277,22 +290,27 @@ def is_expired(noc_date_str, validity_val):
         return False
 
 def reset_form_state():
-    st.session_state["f_noc"] = ""
-    st.session_state["f_date"] = ""
-    st.session_state["f_org"] = ""
-    st.session_state["f_val"] = 0
-    st.session_state["f_gsps"] = ""
-    st.session_state["f_reg"] = ""
-    st.session_state["f_pdf"] = ""
-    st.session_state["fetch_id_input"] = ""
-    st.session_state["last_fetched_id"] = ""
-    st.session_state["upload_reset_counter"] += 1
+    st.session_state["trigger_reset"] = True
 
 
 # ==========================================
 # TAB BUILDER FUNCTIONS
 # ==========================================
 def render_entry_tab():
+    # Execute safe reset BEFORE any widgets are instantiated
+    if st.session_state.get("trigger_reset", False):
+        st.session_state["f_noc"] = ""
+        st.session_state["f_date"] = ""
+        st.session_state["f_org"] = ""
+        st.session_state["f_val"] = 0
+        st.session_state["f_gsps"] = ""
+        st.session_state["f_reg"] = ""
+        st.session_state["f_pdf"] = ""
+        st.session_state["fetch_id_input"] = ""
+        st.session_state["last_fetched_id"] = ""
+        st.session_state["upload_reset_counter"] += 1
+        st.session_state["trigger_reset"] = False
+
     st.subheader("Record Entry & Management")
     
     if st.session_state.entry_success_msg:
@@ -314,14 +332,14 @@ def render_entry_tab():
             elif fetched_data[7] == 'DELETED':
                 st.warning(f"⚠️ Record ID #{target_id} is already deleted.")
             else:
-                st.session_state.f_noc = fetched_data[0]
-                st.session_state.f_date = fetched_data[1]
-                st.session_state.f_org = fetched_data[2]
-                st.session_state.f_val = int(fetched_data[3]) if fetched_data[3] and str(fetched_data[3]).isdigit() else 0
-                st.session_state.f_gsps = fetched_data[4]
-                st.session_state.f_reg = fetched_data[5]
-                st.session_state.f_pdf = fetched_data[6] if fetched_data[6] else ""
-                st.session_state.last_fetched_id = fetch_id.strip()
+                st.session_state["f_noc"] = fetched_data[0]
+                st.session_state["f_date"] = fetched_data[1]
+                st.session_state["f_org"] = fetched_data[2]
+                st.session_state["f_val"] = int(fetched_data[3]) if fetched_data[3] and str(fetched_data[3]).isdigit() else 0
+                st.session_state["f_gsps"] = fetched_data[4]
+                st.session_state["f_reg"] = fetched_data[5]
+                st.session_state["f_pdf"] = fetched_data[6] if fetched_data[6] else ""
+                st.session_state["last_fetched_id"] = fetch_id.strip()
                 st.success(f"✅ Record ID #{target_id} loaded successfully for updating.")
         else:
             st.error("Please enter a valid numeric Record ID.")
@@ -410,8 +428,8 @@ def render_entry_tab():
             clear_btn = st.button("🔄 Clear / Reset", use_container_width=True)
 
         if clear_btn:
+            st.session_state.entry_success_msg = "Form cleared successfully!"
             reset_form_state()
-            st.success("Form cleared successfully!")
             st.rerun()
 
         if save_btn:
@@ -456,7 +474,7 @@ def render_entry_tab():
 
                             with open(final_pdf_path, "wb") as f:
                                 f.write(uploaded_file.getbuffer())
-                            st.session_state.f_pdf = final_pdf_path
+                            st.session_state["f_pdf"] = final_pdf_path
 
                         for g in gsps_list:
                             cursor.execute(
@@ -505,7 +523,7 @@ def render_entry_tab():
 
                         with open(final_pdf_path, "wb") as f:
                             f.write(uploaded_file.getbuffer())
-                        st.session_state.f_pdf = final_pdf_path
+                        st.session_state["f_pdf"] = final_pdf_path
 
                     cursor.execute(
                         "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, mha_noc_copy = %s, modified_by = %s WHERE record_id = %s",
@@ -625,26 +643,29 @@ def render_reports_tab():
             )
             
             if noc_copy and os.path.exists(noc_copy):
-                with st.expander("👁️ Preview / Download Attached File"):
+                with st.expander("👁️ Download / View Attached File"):
                     file_name_lower = noc_copy.lower()
                     with open(noc_copy, "rb") as fp:
                         file_bytes = fp.read()
                     
                     if file_name_lower.endswith(".pdf"):
-                        base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
-                        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="450px" type="application/pdf"></iframe>'
-                        st.markdown(pdf_display, unsafe_allow_html=True)
+                        st.download_button(
+                            "📥 Download / View PDF File",
+                            data=file_bytes,
+                            file_name=os.path.basename(noc_copy),
+                            mime="application/pdf",
+                            key=f"dl_pdf_{i}_{noc}_{dt}"
+                        )
                     else:
                         st.image(file_bytes, caption=os.path.basename(noc_copy), use_container_width=True)
-                    
-                    st.write("")
-                    st.download_button(
-                        "📥 Download File",
-                        data=file_bytes,
-                        file_name=os.path.basename(noc_copy),
-                        mime="application/octet-stream",
-                        key=f"dl_pdf_{i}_{noc}_{dt}"
-                    )
+                        st.write("")
+                        st.download_button(
+                            "📥 Download Image",
+                            data=file_bytes,
+                            file_name=os.path.basename(noc_copy),
+                            mime="application/octet-stream",
+                            key=f"dl_img_{i}_{noc}_{dt}"
+                        )
             else:
                 st.caption("*(No file attached for this NOC)*")
 
