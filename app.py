@@ -18,16 +18,20 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- STRICT BUTTON-ONLY CLICK & REMOVE SIZE LIMIT TEXT CSS ---
+# --- STRICT BUTTON-ONLY CLICK, CUSTOM UPLOAD TEXT & HIDE DEFAULT 200MB SIZE LIMIT CSS ---
 st.markdown(
     """
     <style>
-    /* Disable pointer events on the entire file uploader dropzone container */
-    [data-testid="stFileUploader"] {
+    /* Disable clicks on the entire drag-and-drop dropzone box/row */
+    [data-testid="stFileUploader"] section {
         pointer-events: none !important;
+        background-color: transparent !important;
+        border: none !important;
+        padding: 0px !important;
+        min-height: unset !important;
     }
-    /* Re-enable pointer events strictly on the upload button */
-    [data-testid="stFileUploader"] button {
+    /* Enable clicks strictly on the inner browse/upload button */
+    [data-testid="stFileUploader"] section button {
         pointer-events: auto !important;
         background-color: #1f538d !important;
         color: white !important;
@@ -36,22 +40,23 @@ st.markdown(
         border: none !important;
         font-size: 0px !important; /* Hide original text/icon */
     }
-    [data-testid="stFileUploader"] button:hover {
+    [data-testid="stFileUploader"] section button:hover {
         background-color: #163d6b !important;
         color: white !important;
     }
     /* Inject custom text "UPLOAD" and upload icon onto the button */
-    [data-testid="stFileUploader"] button::after {
+    [data-testid="stFileUploader"] section button::after {
         content: "📁 UPLOAD" !important;
         font-size: 13px !important;
         font-weight: bold !important;
         color: white !important;
     }
-    /* Completely hide all instructions, drag-drop text, and size limit labels */
-    [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"],
-    [data-testid="stFileUploader"] small,
-    [data-testid="stFileUploader"] div[data-testid="stText"],
-    [data-testid="stFileUploader"] span {
+    /* Hide markdown container text */
+    [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] {
+        display: none !important;
+    }
+    /* Completely hide default size limit message */
+    [data-testid="stFileUploader"] small {
         display: none !important;
     }
     /* Style form/action buttons blue */
@@ -335,25 +340,16 @@ def render_entry_tab():
         st.markdown("**GSPS Numbers and Permitted Restricted Areas**")
         gsps_num = st.text_area("GSPS Number(s) (Comma/Newline sep)*", key="f_gsps", height=65, placeholder="Enter 10-digit GSPS numbers...")
 
-        # Parallel Row for Allowed Region, Attachment, and Action Buttons
-        r_col1, r_col2, r_col3, r_col4, r_col5 = st.columns([2, 2, 1.2, 1.2, 1.2])
+        # Parallel Row for Allowed Region and Upload Button
+        r_col1, r_col2 = st.columns([1, 1])
         with r_col1:
             region = st.text_input("Allowed Region*", key="f_reg", placeholder="Pan India / North")
         with r_col2:
             uploaded_file = st.file_uploader(
-                "Browse", 
+                "Document Attachment (Max 5MB)", 
                 type=["pdf", "jpg", "jpeg"], 
                 key=f"pdf_uploader_{st.session_state.upload_reset_counter}"
             )
-        with r_col3:
-            st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
-            save_btn = st.button("💾 Save New Record(s)", use_container_width=True)
-        with r_col4:
-            st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
-            update_btn = st.button("✏️ Update Record", use_container_width=True)
-        with r_col5:
-            st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
-            clear_btn = st.button("🔄 Clear / Reset", use_container_width=True)
 
         file_error = False
         if uploaded_file is not None:
@@ -400,6 +396,16 @@ def render_entry_tab():
             else:
                 with st.expander("👁️ Preview Attached Document"):
                     st.image(file_bytes, caption=os.path.basename(active_file_path), use_container_width=True)
+
+        st.markdown("")
+        # Action Buttons Row below
+        b1, b2, b3 = st.columns([1, 1, 1])
+        with b1:
+            save_btn = st.button("💾 Save New Record(s)", use_container_width=True)
+        with b2:
+            update_btn = st.button("✏️ Update Record", use_container_width=True)
+        with b3:
+            clear_btn = st.button("🔄 Clear / Reset", use_container_width=True)
 
         if clear_btn:
             reset_form_state()
