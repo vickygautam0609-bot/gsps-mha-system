@@ -5,7 +5,7 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import streamlit as st
 import pandas as pd
-import psycopg2
+import psycopg
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -22,12 +22,11 @@ st.set_page_config(
 UPLOAD_DIR = "uploaded_nocs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# --- DATABASE SETUP (SUPABASE POSTGRESQL) ---
+# --- DATABASE SETUP (SUPABASE POSTGRESQL - PSYCOPG 3) ---
 @st.cache_resource
 def get_db_connection():
-    # Connects securely using Streamlit Secrets
-    conn = psycopg2.connect(st.secrets["SUPABASE_DB_URL"])
-    conn.autocommit = True
+    # Connects securely using Streamlit Secrets with explicit sslmode
+    conn = psycopg.connect(st.secrets["SUPABASE_DB_URL"], autocommit=True)
     return conn
 
 conn = get_db_connection()
@@ -686,7 +685,7 @@ def render_users_tab():
                     )
                     st.success(f"User '{new_uname}' created successfully!")
                     st.rerun()
-                except psycopg2.IntegrityError:
+                except psycopg.IntegrityError:
                     st.error(f"Username '{new_uname}' already exists.")
 
     st.markdown("---")
