@@ -167,7 +167,7 @@ for key, default_val in [
     ("f_noc", ""), ("f_date", ""), ("f_org", ""), 
     ("f_val", 0), ("f_gsps", ""), ("f_reg", ""), 
     ("f_pdf", ""), ("fetch_id_input", ""), 
-    ("last_fetched_id", ""), ("entry_success_msg", ""),
+    ("last_fetched_id", ""), 
     ("fetch_status_msg", None), ("priv_success_msg", ""), 
     ("upload_reset_counter", 0), ("trigger_reset", False)
 ]:
@@ -331,10 +331,6 @@ def render_entry_tab():
         st.session_state["trigger_reset"] = False
 
     st.subheader("Record Entry & Management")
-    
-    if st.session_state.entry_success_msg:
-        st.success(st.session_state.entry_success_msg)
-        st.session_state.entry_success_msg = ""
 
     if st.session_state.get("fetch_status_msg"):
         msg_type, msg_text = st.session_state["fetch_status_msg"]
@@ -437,7 +433,7 @@ def render_entry_tab():
             clear_btn = st.button("🔄 Clear / Reset", use_container_width=True)
 
         if clear_btn:
-            st.session_state.entry_success_msg = "Form cleared successfully!"
+            st.toast("Form cleared successfully!", icon="🔄")
             reset_form_state()
             st.rerun()
 
@@ -491,7 +487,7 @@ def render_entry_tab():
                                 (noc_num, noc_date, org, str(validity), g, region, final_pdf_path, st.session_state.name, st.session_state.name)
                             )
                         
-                        st.session_state.entry_success_msg = f"✅ Confirmation: Successfully saved {len(gsps_list)} new record(s) for NOC '{noc_num}'!"
+                        st.toast(f"Successfully saved {len(gsps_list)} record(s) for NOC '{noc_num}'!", icon="✅")
                         reset_form_state()
                         st.rerun()
 
@@ -542,7 +538,7 @@ def render_entry_tab():
                         (noc_num, noc_date, org, str(validity), gsps_num, region, final_pdf_path, st.session_state.name, target_id)
                     )
                     
-                    st.session_state.entry_success_msg = f"✅ Confirmation: Record ID #{target_id} updated successfully!"
+                    st.toast(f"Record ID #{target_id} updated successfully!", icon="✅")
                     reset_form_state()
                     st.rerun()
 
