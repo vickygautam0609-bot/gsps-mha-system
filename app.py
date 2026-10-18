@@ -263,25 +263,25 @@ def validate_gsps(gsps_val):
     return True
 
 def check_duplicate(noc_num, noc_date_val, gsps_val, region_val, exclude_id=None):
-    clean_noc = noc_num.strip().lower()
+    clean_noc = noc_num.strip().upper()
     clean_date = noc_date_val.strip()
     clean_gsps = gsps_val.strip()
-    clean_region = region_val.strip().lower()
+    clean_region = region_val.strip().upper()
     
     cursor.execute("SELECT record_id, mha_noc_number, mha_noc_date, gsps_number, allowed_region FROM n_records WHERE status = 'ACTIVE'")
     for row in cursor.fetchall():
         r_id, db_noc, db_date, db_gsps, db_region = row
         if exclude_id and r_id == exclude_id:
             continue
-        if (db_noc.strip().lower() == clean_noc and 
+        if (db_noc.strip().upper() == clean_noc and 
             db_date.strip() == clean_date and 
             db_gsps.strip() == clean_gsps and 
-            db_region.strip().lower() == clean_region):
+            db_region.strip().upper() == clean_region):
             return True
     return False
 
 def get_existing_noc_copy(noc_num, noc_date):
-    cursor.execute("SELECT mha_noc_copy FROM n_records WHERE LOWER(mha_noc_number) = %s AND mha_noc_date = %s AND mha_noc_copy != '' AND mha_noc_copy IS NOT NULL LIMIT 1", (noc_num.strip().lower(), noc_date.strip()))
+    cursor.execute("SELECT mha_noc_copy FROM n_records WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND mha_noc_copy != '' AND mha_noc_copy IS NOT NULL LIMIT 1", (noc_num.strip().upper(), noc_date.strip()))
     res = cursor.fetchone()
     return res[0] if res else ""
 
@@ -446,11 +446,16 @@ def render_entry_tab():
             st.rerun()
 
         if save_btn:
+            # Force uppercase conversion for MHA NOC Number, Organisation, and Allowed Region
+            clean_noc_num = noc_num.strip().upper()
+            clean_org = org.strip().upper()
+            clean_region = region.strip().upper()
+
             if fetch_id.strip():
                 st.error("⚠️ Please clear the 'Fetch ID' box or click Clear / Reset before saving a new entry.")
             elif file_error:
                 st.error("⚠️ Cannot save: Please fix the file attachment errors above.")
-            elif not noc_num or not noc_date or not org or not gsps_num or not region:
+            elif not clean_noc_num or not noc_date or not clean_org or not gsps_num or not clean_region:
                 st.error("All mandatory fields must be filled out before saving or uploading a file!")
             elif not validate_date(noc_date):
                 st.error("Invalid date format! Use DD.MM.YYYY.")
@@ -465,15 +470,15 @@ def render_entry_tab():
                 else:
                     conflict = False
                     for g in gsps_list:
-                        if check_duplicate(noc_num, noc_date, g, region):
-                            st.error(f"Duplicate entry exists for NOC '{noc_num}', Date '{noc_date}', GSPS '{g}', Region '{region}'.")
+                        if check_duplicate(clean_noc_num, noc_date, g, clean_region):
+                            st.error(f"Duplicate entry exists for NOC '{clean_noc_num}', Date '{noc_date}', GSPS '{g}', Region '{clean_region}'.")
                             conflict = True
                             break
                     if not conflict:
-                        old_noc_copy = get_existing_noc_copy(noc_num, noc_date)
+                        old_noc_copy = get_existing_noc_copy(clean_noc_num, noc_date)
                         final_pdf_path = shared_noc_copy
                         if uploaded_file is not None and not file_error:
-                            safe_noc = noc_num.replace("/", "_").replace("\\", "_")
+                            safe_noc = clean_noc_num.replace("/", "_").replace("\\", "_")
                             safe_date = noc_date.replace(".", "_")
                             ext = os.path.splitext(uploaded_file.name)[1].lower()
                             filename = f"NOC_{safe_noc}_{safe_date}{ext}"
@@ -492,14 +497,19 @@ def render_entry_tab():
                         for g in gsps_list:
                             cursor.execute(
                                 "INSERT INTO n_records (mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, mha_noc_copy, status, created_by, modified_by) VALUES (%s, %s, %s, %s, %s, %s, %s, 'ACTIVE', %s, %s)",
-                                (noc_num, noc_date, org, str(validity), g, region, final_pdf_path, st.session_state.name, st.session_state.name)
+                                (clean_noc_num, noc_date, clean_org, str(validity), g, clean_region, final_pdf_path, st.session_state.name, st.session_state.name)
                             )
                         
-                        st.toast(f"Successfully saved {len(gsps_list)} record(s) for NOC '{noc_num}'!", icon="✅")
+                        st.toast(f"Successfully saved {len(gsps_list)} record(s) for NOC '{clean_noc_num}'!", icon="✅")
                         reset_form_state()
                         st.rerun()
 
         if update_btn:
+            # Force uppercase conversion for MHA NOC Number, Organisation, and Allowed Region
+            clean_noc_num = noc_num.strip().upper()
+            clean_org = org.strip().upper()
+            clean_region = region.strip().upper()
+
             if not fetch_id.strip() or not fetch_id.strip().isdigit():
                 st.error("⚠️ To update a record, first enter its numeric ID in 'Fetch ID (to Update)' right next to this button and press Enter.")
             elif st.session_state.get("last_fetched_id") != fetch_id.strip():
@@ -507,7 +517,7 @@ def render_entry_tab():
                 st.rerun()
             elif file_error:
                 st.error("⚠️ Cannot update: Please fix the file attachment errors above.")
-            elif not noc_num or not noc_date or not org or not gsps_num or not region:
+            elif not clean_noc_num or not noc_date or not clean_org or not gsps_num or not clean_region:
                 st.error("All mandatory fields must be filled out before updating!")
             elif "," in gsps_num or "\n" in gsps_num:
                 st.error("Bulk entries with multiple numbers are only allowed when saving new records.")
@@ -519,13 +529,13 @@ def render_entry_tab():
                 st.error("GSPS Number must be exactly 10 digits.")
             else:
                 target_id = int(fetch_id.strip())
-                if check_duplicate(noc_num, noc_date, gsps_num, region, exclude_id=target_id):
+                if check_duplicate(clean_noc_num, noc_date, gsps_num, clean_region, exclude_id=target_id):
                     st.error("Another active record with these details (NOC, Date, GSPS, Region) already exists!")
                 else:
-                    old_noc_copy = get_existing_noc_copy(noc_num, noc_date)
+                    old_noc_copy = get_existing_noc_copy(clean_noc_num, noc_date)
                     final_pdf_path = shared_noc_copy
                     if uploaded_file is not None and not file_error:
-                        safe_noc = noc_num.replace("/", "_").replace("\\", "_")
+                        safe_noc = clean_noc_num.replace("/", "_").replace("\\", "_")
                         safe_date = noc_date.replace(".", "_")
                         ext = os.path.splitext(uploaded_file.name)[1].lower()
                         filename = f"NOC_{safe_noc}_{safe_date}{ext}"
@@ -543,7 +553,7 @@ def render_entry_tab():
 
                     cursor.execute(
                         "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, mha_noc_copy = %s, modified_by = %s WHERE record_id = %s",
-                        (noc_num, noc_date, org, str(validity), gsps_num, region, final_pdf_path, st.session_state.name, target_id)
+                        (clean_noc_num, noc_date, clean_org, str(validity), gsps_num, clean_region, final_pdf_path, st.session_state.name, target_id)
                     )
                     
                     st.toast(f"Record ID #{target_id} updated successfully!", icon="✅")
