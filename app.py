@@ -164,18 +164,15 @@ if "logged_in" not in st.session_state:
     st.session_state.p_users = 0
 
 # Form fields session state initialization
-if "f_noc" not in st.session_state: st.session_state.f_noc = ""
-if "f_date" not in st.session_state: st.session_state.f_date = ""
-if "f_org" not in st.session_state: st.session_state.f_org = ""
-if "f_val" not in st.session_state: st.session_state.f_val = 0
-if "f_gsps" not in st.session_state: st.session_state.f_gsps = ""
-if "f_reg" not in st.session_state: st.session_state.f_reg = ""
-if "f_pdf" not in st.session_state: st.session_state.f_pdf = ""
-if "fetch_id_input" not in st.session_state: st.session_state.fetch_id_input = ""
-if "upload_reset_counter" not in st.session_state: st.session_state.upload_reset_counter = 0
-if "last_fetched_id" not in st.session_state: st.session_state.last_fetched_id = ""
-if "priv_success_msg" not in st.session_state: st.session_state.priv_success_msg = ""
-if "entry_success_msg" not in st.session_state: st.session_state.entry_success_msg = ""
+for key, default_val in [
+    ("f_noc", ""), ("f_date", ""), ("f_org", ""), 
+    ("f_val", 0), ("f_gsps", ""), ("f_reg", ""), 
+    ("f_pdf", ""), ("fetch_id_input", ""), 
+    ("last_fetched_id", ""), ("entry_success_msg", ""),
+    ("priv_success_msg", ""), ("upload_reset_counter", 0)
+]:
+    if key not in st.session_state:
+        st.session_state[key] = default_val
 
 # ==========================================
 # AUTHENTICATION / LOGIN SCREEN
