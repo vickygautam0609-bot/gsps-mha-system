@@ -18,6 +18,38 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- STRICT BUTTON-ONLY CLICK FILE UPLOADER CSS ---
+st.markdown(
+    """
+    <style>
+    /* Disable clicks on the entire drag-and-drop dropzone box/row */
+    [data-testid="stFileUploader"] section {
+        pointer-events: none !important;
+        background-color: #fcfcfc !important;
+        border: 1px solid #e0e0e0 !important;
+    }
+    /* Enable clicks strictly on the inner browse/upload button */
+    [data-testid="stFileUploader"] section button {
+        pointer-events: auto !important;
+        background-color: #1f538d !important;
+        color: white !important;
+        border-radius: 4px !important;
+        padding: 0.35rem 0.75rem !important;
+        border: none !important;
+    }
+    [data-testid="stFileUploader"] section button:hover {
+        background-color: #163d6b !important;
+        color: white !important;
+    }
+    /* Clean up helper text inside the dropzone */
+    [data-testid="stFileUploader"] small {
+        display: none !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # --- DIRECTORY SETUP FOR COPIES ---
 UPLOAD_DIR = "uploaded_nocs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -265,7 +297,7 @@ def render_entry_tab():
         with c6: region = st.text_input("Allowed Region*", key="f_reg")
 
         uploaded_file = st.file_uploader(
-            "Upload Document (PDF or JPG/JPEG, Max 20MB)", 
+            "Attachment", 
             type=["pdf", "jpg", "jpeg"], 
             key=f"pdf_uploader_{st.session_state.upload_reset_counter}"
         )
@@ -812,9 +844,6 @@ def render_users_tab():
 # ==========================================
 tab_labels = []
 tab_funcs = []
-
-if file_oversized := False: # Placeholder context guard
-    pass
 
 if st.session_state.p_entry == 1:
     tab_labels.append("📝 Data Entry & Management")
