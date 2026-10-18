@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- STRICT BUTTON-ONLY CLICK, HELPER TEXT & BLUE BUTTONS CSS ---
+# --- STRICT BUTTON-ONLY CLICK & CUSTOM FILE UPLOADER HELPER TEXT CSS ---
 st.markdown(
     """
     <style>
@@ -35,7 +35,7 @@ st.markdown(
         background-color: #1f538d !important;
         color: white !important;
         border-radius: 4px !important;
-        padding: 0.35rem 0.75rem !important;
+        padding: 0.3rem 0.6rem !important;
         border: none !important;
     }
     [data-testid="stFileUploader"] section button:hover {
@@ -327,9 +327,9 @@ def render_entry_tab():
 
     st.markdown("---")
 
-    # --- STRUCTURED FORM CONTAINER ---
+    # --- COMPACT STRUCTURED FORM CONTAINER ---
     with st.container():
-        st.markdown("##### 📄 MHA NOC Information")
+        st.markdown("**MHA NOC Information**")
         col1, col2 = st.columns(2)
         with col1:
             noc_num = st.text_input("NOC Number*", key="f_noc", placeholder="e.g., 11016/...")
@@ -338,13 +338,11 @@ def render_entry_tab():
             noc_date = st.text_input("NOC Date (DD.MM.YYYY)*", key="f_date", placeholder="DD.MM.YYYY")
             validity = st.number_input("Validity (Years)", min_value=0, step=1, format="%d", key="f_val")
 
-        st.markdown("")
-        st.markdown("##### 📡 GSPS Numbers and Permitted Restricted Areas")
-        gsps_num = st.text_area("GSPS Number(s) (Comma or Newline separated for bulk entry)*", key="f_gsps", height=110, placeholder="Enter 10-digit GSPS numbers...")
+        st.markdown("**GSPS Numbers and Permitted Restricted Areas**")
+        gsps_num = st.text_area("GSPS Number(s) (Comma/Newline sep)*", key="f_gsps", height=65, placeholder="Enter 10-digit GSPS numbers...")
         region = st.text_input("Allowed Region*", key="f_reg", placeholder="e.g., Pan India / North Zone")
 
-        st.markdown("")
-        st.markdown("##### 📎 Document Attachment (PDF or JPG/JPEG, Max 5MB)")
+        st.markdown("**Document Attachment (Max 5MB)**")
         uploaded_file = st.file_uploader(
             "Browse", 
             type=["pdf", "jpg", "jpeg"], 
@@ -359,12 +357,12 @@ def render_entry_tab():
                 st.error("⚠️ Error: Only PDF and JPG/JPEG files are allowed.")
             elif uploaded_file.size > 5 * 1024 * 1024:
                 file_error = True
-                st.error("⚠️ Error: File size exceeds the 5 MB limit. Please attach a smaller file.")
+                st.error("⚠️ Error: File size exceeds the 5 MB limit.")
             else:
-                st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 13px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
+                st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
                 if uploaded_file.type == "application/pdf":
                     st.download_button(
-                        "📥 Open / Download Uploaded PDF",
+                        "📥 Download / View Uploaded PDF",
                         data=uploaded_file.getvalue(),
                         file_name=uploaded_file.name,
                         mime="application/pdf",
@@ -382,12 +380,12 @@ def render_entry_tab():
 
         if uploaded_file is None and active_file_path and os.path.exists(active_file_path):
             file_name_lower = active_file_path.lower()
-            st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 13px;">📎 Attached: {os.path.basename(active_file_path)}</span>', unsafe_allow_html=True)
+            st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Attached: {os.path.basename(active_file_path)}</span>', unsafe_allow_html=True)
             with open(active_file_path, "rb") as fp:
                 file_bytes = fp.read()
             if file_name_lower.endswith(".pdf"):
                 st.download_button(
-                    "📥 Open / Download Attached PDF",
+                    "📥 Download / View Attached PDF",
                     data=file_bytes,
                     file_name=os.path.basename(active_file_path),
                     mime="application/pdf",
