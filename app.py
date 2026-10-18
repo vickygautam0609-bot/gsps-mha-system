@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- STRICT BUTTON-ONLY CLICK & CUSTOM FILE UPLOADER HELPER TEXT CSS ---
+# --- STRICT BUTTON-ONLY CLICK & CLEAN FILE UPLOADER CSS ---
 st.markdown(
     """
     <style>
@@ -42,23 +42,12 @@ st.markdown(
         background-color: #163d6b !important;
         color: white !important;
     }
-    /* Hide markdown container text */
-    [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] {
+    /* Completely hide default size limit messages, helper text, and drag/drop labels */
+    [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"],
+    [data-testid="stFileUploader"] small,
+    [data-testid="stFileUploader"] div[data-testid="stText"],
+    [data-testid="stFileUploader"] span {
         display: none !important;
-    }
-    /* Replace default size limit message with 'pdf, jpg' */
-    [data-testid="stFileUploader"] small {
-        visibility: hidden !important;
-        position: relative !important;
-    }
-    [data-testid="stFileUploader"] small::after {
-        content: "pdf, jpg" !important;
-        visibility: visible !important;
-        position: absolute !important;
-        left: 0 !important;
-        top: 0 !important;
-        color: #555 !important;
-        font-size: 11px !important;
     }
     </style>
     """,
