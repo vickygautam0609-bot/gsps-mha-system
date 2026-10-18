@@ -1,11 +1,11 @@
 import os
-import sqlite3
 import io
 import base64
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import streamlit as st
 import pandas as pd
+import psycopg2
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -22,10 +22,12 @@ st.set_page_config(
 UPLOAD_DIR = "uploaded_nocs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# --- DATABASE SETUP ---
+# --- DATABASE SETUP (SUPABASE POSTGRESQL) ---
 @st.cache_resource
 def get_db_connection():
-    conn = sqlite3.connect("mha_records.db", check_same_thread=False)
+    # Connects securely using Streamlit Secrets
+    conn = psycopg2.connect(st.secrets["SUPABASE_DB_URL"])
+    conn.autocommit = True
     return conn
 
 conn = get_db_connection()
@@ -33,7 +35,7 @@ cursor = conn.cursor()
 
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS n_records (
-        record_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        record_id SERIAL PRIMARY KEY,
         mha_noc_number TEXT,
         mha_noc_date TEXT,
         organisation TEXT,
@@ -49,7 +51,7 @@ cursor.execute("""
 
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
-        user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id SERIAL PRIMARY KEY,
         name TEXT,
         username TEXT UNIQUE,
         password TEXT,
@@ -62,30 +64,25 @@ cursor.execute("""
 """)
 
 # Check and update schema for existing user tables if columns are missing
-cursor.execute("PRAGMA table_info(users)")
-user_cols = [col[1] for col in cursor.fetchall()]
+cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name='users'")
+user_cols = [col[0] for col in cursor.fetchall()]
 if "p_entry" not in user_cols:
-    cursor.execute("ALTER TABLE users ADD COLUMN p_entry INTEGER DEFAULT 1")
-    cursor.execute("ALTER TABLE users ADD COLUMN p_reports INTEGER DEFAULT 1")
-    cursor.execute("ALTER TABLE users ADD COLUMN p_trash INTEGER DEFAULT 1")
-    cursor.execute("ALTER TABLE users ADD COLUMN p_users INTEGER DEFAULT 0")
-    conn.commit()
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS p_entry INTEGER DEFAULT 1")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS p_reports INTEGER DEFAULT 1")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS p_trash INTEGER DEFAULT 1")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS p_users INTEGER DEFAULT 0")
 
 # Insert default admin user if table is empty, and ensure admin always has User Management privilege locked on
 cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
 if cursor.fetchone()[0] == 0:
     cursor.execute(
-        "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users) VALUES (?, ?, ?, ?, 1, 1, 1, 1)",
+        "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users) VALUES (%s, %s, %s, %s, 1, 1, 1, 1)",
         ("Administrator", "admin", "admin123", "Administrator"),
     )
-    conn.commit()
 else:
     cursor.execute(
         "UPDATE users SET p_users = 1, role = 'Administrator' WHERE username = 'admin'"
     )
-    conn.commit()
-
-conn.commit()
 
 # --- SESSION STATE INITIALIZATION ---
 if "logged_in" not in st.session_state:
@@ -125,7 +122,7 @@ if not st.session_state.logged_in:
             submit = st.form_submit_button("Login", use_container_width=True)
             
             if submit:
-                cursor.execute("SELECT name, role, username, p_entry, p_reports, p_trash, p_users FROM users WHERE username = ? AND password = ?", (uname.strip(), pwd.strip()))
+                cursor.execute("SELECT name, role, username, p_entry, p_reports, p_trash, p_users FROM users WHERE username = %s AND password = %s", (uname.strip(), pwd.strip()))
                 user = cursor.fetchone()
                 if user:
                     st.session_state.logged_in = True
@@ -198,7 +195,7 @@ def check_duplicate(noc_num, noc_date_val, gsps_val, region_val, exclude_id=None
     return False
 
 def get_existing_noc_copy(noc_num, noc_date):
-    cursor.execute("SELECT mha_noc_copy FROM n_records WHERE LOWER(mha_noc_number) = ? AND mha_noc_date = ? AND mha_noc_copy != '' AND mha_noc_copy IS NOT NULL LIMIT 1", (noc_num.strip().lower(), noc_date.strip()))
+    cursor.execute("SELECT mha_noc_copy FROM n_records WHERE LOWER(mha_noc_number) = %s AND mha_noc_date = %s AND mha_noc_copy != '' AND mha_noc_copy IS NOT NULL LIMIT 1", (noc_num.strip().lower(), noc_date.strip()))
     res = cursor.fetchone()
     return res[0] if res else ""
 
@@ -226,7 +223,7 @@ def render_entry_tab():
     if fetch_id.strip() and fetch_id.strip() != st.session_state.last_fetched_id:
         if fetch_id.strip().isdigit():
             target_id = int(fetch_id.strip())
-            cursor.execute("SELECT mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, mha_noc_copy, status FROM n_records WHERE record_id = ?", (target_id,))
+            cursor.execute("SELECT mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, mha_noc_copy, status FROM n_records WHERE record_id = %s", (target_id,))
             fetched_data = cursor.fetchone()
             if not fetched_data:
                 st.warning(f"⚠️ Record ID #{target_id} does not exist.")
@@ -346,10 +343,9 @@ def render_entry_tab():
 
                         for g in gsps_list:
                             cursor.execute(
-                                "INSERT INTO n_records (mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, mha_noc_copy, status, created_by, modified_by) VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)",
+                                "INSERT INTO n_records (mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, mha_noc_copy, status, created_by, modified_by) VALUES (%s, %s, %s, %s, %s, %s, %s, 'ACTIVE', %s, %s)",
                                 (noc_num, noc_date, org, str(validity), g, region, final_pdf_path, st.session_state.name, st.session_state.name)
                             )
-                        conn.commit()
                         st.success(f"✅ Confirmation: Successfully saved {len(gsps_list)} new record(s) for NOC '{noc_num}'!")
 
         if update_btn:
@@ -382,10 +378,9 @@ def render_entry_tab():
                         st.session_state.f_pdf = final_pdf_path
 
                     cursor.execute(
-                        "UPDATE n_records SET mha_noc_number = ?, mha_noc_date = ?, organisation = ?, validity = ?, gsps_number = ?, allowed_region = ?, mha_noc_copy = ?, modified_by = ? WHERE record_id = ?",
+                        "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, mha_noc_copy = %s, modified_by = %s WHERE record_id = %s",
                         (noc_num, noc_date, org, str(validity), gsps_num, region, final_pdf_path, st.session_state.name, target_id)
                     )
-                    conn.commit()
                     st.success(f"✅ Confirmation: Record ID #{target_id} updated successfully!")
 
     st.markdown("---")
@@ -436,8 +431,7 @@ def render_entry_tab():
         if selected_to_delete:
             if st.button("🗑️ Delete Selected Records", type="primary", key="del_active_btn"):
                 for r_id in selected_to_delete:
-                    cursor.execute("UPDATE n_records SET status = 'DELETED', modified_by = ? WHERE record_id = ?", (st.session_state.name, r_id))
-                conn.commit()
+                    cursor.execute("UPDATE n_records SET status = 'DELETED', modified_by = %s WHERE record_id = %s", (st.session_state.name, r_id))
                 st.success(f"Successfully moved {len(selected_to_delete)} record(s) to Deleted Records.")
                 st.rerun()
     else:
@@ -620,8 +614,7 @@ def render_trash_tab():
         if to_restore:
             if st.button("♻️ Restore Selected Records", key="restore_btn_trash"):
                 for r_id in to_restore:
-                    cursor.execute("UPDATE n_records SET status = 'ACTIVE', modified_by = ? WHERE record_id = ?", (st.session_state.name, r_id))
-                conn.commit()
+                    cursor.execute("UPDATE n_records SET status = 'ACTIVE', modified_by = %s WHERE record_id = %s", (st.session_state.name, r_id))
                 st.success(f"Successfully restored {len(to_restore)} record(s)!")
                 st.rerun()
     else:
@@ -659,8 +652,7 @@ def render_users_tab():
                 elif new_pwd != confirm_pwd:
                     st.error("Passwords do not match!")
                 else:
-                    cursor.execute("UPDATE users SET password = ? WHERE username = ?", (new_pwd.strip(), target_uname))
-                    conn.commit()
+                    cursor.execute("UPDATE users SET password = %s WHERE username = %s", (new_pwd.strip(), target_uname))
                     st.success(f"✅ Password for username '{target_uname}' updated successfully!")
 
     st.markdown("---")
@@ -689,13 +681,12 @@ def render_users_tab():
                         p_users = True
 
                     cursor.execute(
-                        "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                         (new_name, new_uname, new_pwd, new_role, int(p_entry), int(p_reports), int(p_trash), int(p_users))
                     )
-                    conn.commit()
                     st.success(f"User '{new_uname}' created successfully!")
                     st.rerun()
-                except sqlite3.IntegrityError:
+                except psycopg2.IntegrityError:
                     st.error(f"Username '{new_uname}' already exists.")
 
     st.markdown("---")
@@ -759,12 +750,11 @@ def render_users_tab():
                         us = 1 if row["Users"] else 0
 
                     cursor.execute(
-                        "UPDATE users SET p_entry = ?, p_reports = ?, p_trash = ?, p_users = ? WHERE user_id = ?",
+                        "UPDATE users SET p_entry = %s, p_reports = %s, p_trash = %s, p_users = %s WHERE user_id = %s",
                         (e, r, t, us, u_id)
                     )
-                conn.commit()
                 
-                cursor.execute("SELECT p_entry, p_reports, p_trash, p_users FROM users WHERE username = ?", (st.session_state.username,))
+                cursor.execute("SELECT p_entry, p_reports, p_trash, p_users FROM users WHERE username = %s", (st.session_state.username,))
                 p_row = cursor.fetchone()
                 if p_row:
                     st.session_state.p_entry = p_row[0]
@@ -790,8 +780,7 @@ def render_users_tab():
                     if u == st.session_state.username:
                         st.error("You cannot delete your own active account.")
                     else:
-                        cursor.execute("DELETE FROM users WHERE username = ?", (u,))
-                conn.commit()
+                        cursor.execute("DELETE FROM users WHERE username = %s", (u,))
                 st.success("Selected user(s) deleted.")
                 st.rerun()
 
