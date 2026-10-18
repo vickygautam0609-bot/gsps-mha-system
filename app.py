@@ -288,9 +288,10 @@ def render_entry_tab():
         st.success(st.session_state.entry_success_msg)
         st.session_state.entry_success_msg = ""
 
+    # Fetch Record ID Bar
     col_fetch, col_clear_space = st.columns([2, 6])
     with col_fetch:
-        fetch_id = st.text_input("Fetch by Record ID", placeholder="Enter ID...", key="fetch_id_input")
+        fetch_id = st.text_input("Fetch by Record ID (for Updates)", placeholder="Enter ID...", key="fetch_id_input")
     
     if fetch_id.strip() and fetch_id.strip() != st.session_state.last_fetched_id:
         if fetch_id.strip().isdigit():
@@ -314,26 +315,31 @@ def render_entry_tab():
         else:
             st.error("Please enter a valid numeric Record ID.")
 
+    st.markdown("---")
+
+    # --- STRUCTURED FORM CONTAINER ---
     with st.container():
-        # Row 1: NOC Number, NOC Date, Organisation, Validity, Browse (Attachment)
-        c1, c2, c3, c4, c5 = st.columns(5)
+        st.markdown("##### 📄 NOC Information & Metadata")
+        col1, col2 = st.columns(2)
+        with col1:
+            noc_num = st.text_input("NOC Number*", key="f_noc", placeholder="e.g., 11016/...")
+            org = st.text_input("Organisation*", key="f_org", placeholder="e.g., BSNL / Inmarsat")
+        with col2:
+            noc_date = st.text_input("NOC Date (DD.MM.YYYY)*", key="f_date", placeholder="DD.MM.YYYY")
+            validity = st.number_input("Validity (Years)", min_value=0, step=1, format="%d", key="f_val")
 
-        with c1: noc_num = st.text_input("NOC Number*", key="f_noc")
-        with c2: noc_date = st.text_input("NOC Date (DD.MM.YYYY)*", key="f_date")
-        with c3: org = st.text_input("Organisation*", key="f_org")
-        with c4: validity = st.number_input("Validity (Yrs)", min_value=0, step=1, format="%d", key="f_val")
-        with c5: 
-            uploaded_file = st.file_uploader(
-                "Browse", 
-                type=["pdf", "jpg", "jpeg"], 
-                key=f"pdf_uploader_{st.session_state.upload_reset_counter}"
-            )
+        st.markdown("")
+        st.markdown("##### 📡 GSPS Numbers & Operational Region")
+        gsps_num = st.text_area("GSPS Number(s) (Comma or Newline separated for bulk entry)*", key="f_gsps", height=110, placeholder="Enter 10-digit GSPS numbers...")
+        region = st.text_input("Allowed Region*", key="f_reg", placeholder="e.g., Pan India / North Zone")
 
-        # Row 2: GSPS Number with long entry space (text_area)
-        gsps_num = st.text_area("GSPS Number(s) (Comma/Newline sep for bulk)*", key="f_gsps", height=90, placeholder="Enter 10-digit GSPS numbers...")
-
-        # Row 3: Allowed Region
-        region = st.text_input("Allowed Region*", key="f_reg")
+        st.markdown("")
+        st.markdown("##### 📎 Document Attachment (PDF or JPG/JPEG, Max 5MB)")
+        uploaded_file = st.file_uploader(
+            "Browse", 
+            type=["pdf", "jpg", "jpeg"], 
+            key=f"pdf_uploader_{st.session_state.upload_reset_counter}"
+        )
 
         file_error = False
         if uploaded_file is not None:
@@ -381,7 +387,8 @@ def render_entry_tab():
                 with st.expander("👁️ Preview Attached Document"):
                     st.image(file_bytes, caption=os.path.basename(active_file_path), use_container_width=True)
 
-        st.write("")
+        st.markdown("---")
+        # Action Buttons Bar
         b1, b2, b3 = st.columns([1, 1, 1])
         with b1:
             save_btn = st.button("💾 Save New Record(s)", use_container_width=True)
@@ -429,7 +436,6 @@ def render_entry_tab():
                             filename = f"NOC_{safe_noc}_{safe_date}{ext}"
                             final_pdf_path = os.path.join(UPLOAD_DIR, filename)
                             
-                            # Delete old attachment if a new different file is uploaded to save space
                             if old_noc_copy and os.path.exists(old_noc_copy) and os.path.abspath(old_noc_copy) != os.path.abspath(final_pdf_path):
                                 try:
                                     os.remove(old_noc_copy)
@@ -479,7 +485,6 @@ def render_entry_tab():
                         filename = f"NOC_{safe_noc}_{safe_date}{ext}"
                         final_pdf_path = os.path.join(UPLOAD_DIR, filename)
                         
-                        # Delete old attachment if a new different file is uploaded to save space
                         if old_noc_copy and os.path.exists(old_noc_copy) and os.path.abspath(old_noc_copy) != os.path.abspath(final_pdf_path):
                             try:
                                 os.remove(old_noc_copy)
