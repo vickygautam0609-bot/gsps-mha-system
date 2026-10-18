@@ -181,8 +181,8 @@ for key, default_val in [
     ("f_val", 0), ("f_gsps", ""), ("f_reg", ""), 
     ("f_pdf", ""), ("fetch_id_input", ""), 
     ("last_fetched_id", ""), ("entry_success_msg", ""),
-    ("priv_success_msg", ""), ("upload_reset_counter", 0),
-    ("trigger_reset", False)
+    ("fetch_status_msg", None), ("priv_success_msg", ""), 
+    ("upload_reset_counter", 0), ("trigger_reset", False)
 ]:
     if key not in st.session_state:
         st.session_state[key] = default_val
@@ -292,6 +292,37 @@ def is_expired(noc_date_str, validity_val):
 def reset_form_state():
     st.session_state["trigger_reset"] = True
 
+def on_fetch_id_change():
+    """Callback triggered when user enters a Record ID next to the Update button."""
+    fetch_val = st.session_state.get("fetch_id_input", "").strip()
+    if not fetch_val:
+        st.session_state["last_fetched_id"] = ""
+        st.session_state["fetch_status_msg"] = None
+        return
+    if fetch_val.isdigit():
+        target_id = int(fetch_val)
+        cursor.execute(
+            "SELECT mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, mha_noc_copy, status FROM n_records WHERE record_id = %s",
+            (target_id,)
+        )
+        fetched_data = cursor.fetchone()
+        if not fetched_data:
+            st.session_state["fetch_status_msg"] = ("warning", f"⚠️ Record ID #{target_id} does not exist.")
+        elif fetched_data[7] == 'DELETED':
+            st.session_state["fetch_status_msg"] = ("warning", f"⚠️ Record ID #{target_id} is already deleted.")
+        else:
+            st.session_state["f_noc"] = fetched_data[0]
+            st.session_state["f_date"] = fetched_data[1]
+            st.session_state["f_org"] = fetched_data[2]
+            st.session_state["f_val"] = int(fetched_data[3]) if fetched_data[3] and str(fetched_data[3]).isdigit() else 0
+            st.session_state["f_gsps"] = fetched_data[4]
+            st.session_state["f_reg"] = fetched_data[5]
+            st.session_state["f_pdf"] = fetched_data[6] if fetched_data[6] else ""
+            st.session_state["last_fetched_id"] = fetch_val
+            st.session_state["fetch_status_msg"] = ("success", f"✅ Record ID #{target_id} loaded! Modify fields above and click 'Update Record'.")
+    else:
+        st.session_state["fetch_status_msg"] = ("error", "⚠️ Please enter a valid numeric Record ID.")
+
 
 # ==========================================
 # TAB BUILDER FUNCTIONS
@@ -308,6 +339,7 @@ def render_entry_tab():
         st.session_state["f_pdf"] = ""
         st.session_state["fetch_id_input"] = ""
         st.session_state["last_fetched_id"] = ""
+        st.session_state["fetch_status_msg"] = None
         st.session_state["upload_reset_counter"] += 1
         st.session_state["trigger_reset"] = False
 
@@ -317,34 +349,14 @@ def render_entry_tab():
         st.success(st.session_state.entry_success_msg)
         st.session_state.entry_success_msg = ""
 
-    # Fetch Record ID Bar
-    col_fetch, col_clear_space = st.columns([2, 6])
-    with col_fetch:
-        fetch_id = st.text_input("Fetch by Record ID (for Updates)", placeholder="Enter ID...", key="fetch_id_input")
-    
-    if fetch_id.strip() and fetch_id.strip() != st.session_state.last_fetched_id:
-        if fetch_id.strip().isdigit():
-            target_id = int(fetch_id.strip())
-            cursor.execute("SELECT mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, mha_noc_copy, status FROM n_records WHERE record_id = %s", (target_id,))
-            fetched_data = cursor.fetchone()
-            if not fetched_data:
-                st.warning(f"⚠️ Record ID #{target_id} does not exist.")
-            elif fetched_data[7] == 'DELETED':
-                st.warning(f"⚠️ Record ID #{target_id} is already deleted.")
-            else:
-                st.session_state["f_noc"] = fetched_data[0]
-                st.session_state["f_date"] = fetched_data[1]
-                st.session_state["f_org"] = fetched_data[2]
-                st.session_state["f_val"] = int(fetched_data[3]) if fetched_data[3] and str(fetched_data[3]).isdigit() else 0
-                st.session_state["f_gsps"] = fetched_data[4]
-                st.session_state["f_reg"] = fetched_data[5]
-                st.session_state["f_pdf"] = fetched_data[6] if fetched_data[6] else ""
-                st.session_state["last_fetched_id"] = fetch_id.strip()
-                st.success(f"✅ Record ID #{target_id} loaded successfully for updating.")
+    if st.session_state.get("fetch_status_msg"):
+        msg_type, msg_text = st.session_state["fetch_status_msg"]
+        if msg_type == "success":
+            st.success(msg_text)
+        elif msg_type == "warning":
+            st.warning(msg_text)
         else:
-            st.error("Please enter a valid numeric Record ID.")
-
-    st.markdown("---")
+            st.error(msg_text)
 
     # --- COMPACT STRUCTURED FORM CONTAINER ---
     with st.container():
@@ -418,13 +430,23 @@ def render_entry_tab():
                     st.image(file_bytes, caption=os.path.basename(active_file_path), use_container_width=True)
 
         st.markdown("")
-        # Action Buttons Row below
-        b1, b2, b3 = st.columns([1, 1, 1])
+        # Action Bar: Save | Fetch Record ID (paired right next to Update) | Update | Clear
+        b1, b_fetch, b2, b3 = st.columns([1.2, 1.1, 1.2, 1])
         with b1:
+            st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
             save_btn = st.button("💾 Save New Record(s)", use_container_width=True)
+        with b_fetch:
+            fetch_id = st.text_input(
+                "🔍 Fetch Record ID (to Update)",
+                placeholder="Type ID & press Enter",
+                key="fetch_id_input",
+                on_change=on_fetch_id_change
+            )
         with b2:
+            st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
             update_btn = st.button("✏️ Update Record", use_container_width=True)
         with b3:
+            st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
             clear_btn = st.button("🔄 Clear / Reset", use_container_width=True)
 
         if clear_btn:
@@ -434,7 +456,7 @@ def render_entry_tab():
 
         if save_btn:
             if fetch_id.strip():
-                st.error("⚠️ Please clear the 'Fetch by Record ID' field or click Clear before saving a new entry.")
+                st.error("⚠️ Please clear the 'Fetch Record ID' box or click Clear / Reset before saving a new entry.")
             elif file_error:
                 st.error("⚠️ Cannot save: Please fix the file attachment errors above.")
             elif not noc_num or not noc_date or not org or not gsps_num or not region:
@@ -487,8 +509,11 @@ def render_entry_tab():
                         st.rerun()
 
         if update_btn:
-            if not fetch_id.strip() or not fetch_id.isdigit():
-                st.error("Please enter a valid numeric Record ID in 'Fetch by Record ID' above to update.")
+            if not fetch_id.strip() or not fetch_id.strip().isdigit():
+                st.error("⚠️ To update a record, first enter its numeric ID in 'Fetch Record ID (to Update)' right next to this button and press Enter.")
+            elif st.session_state.get("last_fetched_id") != fetch_id.strip():
+                on_fetch_id_change()
+                st.rerun()
             elif file_error:
                 st.error("⚠️ Cannot update: Please fix the file attachment errors above.")
             elif not noc_num or not noc_date or not org or not gsps_num or not region:
@@ -796,172 +821,4 @@ def render_users_tab():
                 target_uname = st.session_state.username
                 st.info(f"Updating password for your account: **{st.session_state.name} ({target_uname})**")
             
-            new_pwd = st.text_input("New Password", type="password")
-            confirm_pwd = st.text_input("Confirm New Password", type="password")
-            
-            update_pwd_btn = st.form_submit_button("🔒 Update Password", use_container_width=True)
-            if update_pwd_btn:
-                if not new_pwd or not confirm_pwd:
-                    st.error("Please fill out both password fields.")
-                elif new_pwd != confirm_pwd:
-                    st.error("Passwords do not match!")
-                else:
-                    cursor.execute("UPDATE users SET password = %s WHERE username = %s", (new_pwd.strip(), target_uname))
-                    st.success(f"✅ Password for username '{target_uname}' updated successfully!")
-
-    st.markdown("---")
-    with st.form("new_user_form"):
-        st.write("### Create New User")
-        uc1, uc2, uc3, uc4 = st.columns(4)
-        with uc1: new_name = st.text_input("Full Name")
-        with uc2: new_uname = st.text_input("Username")
-        with uc3: new_pwd = st.text_input("Password", type="password")
-        with uc4: new_role = st.selectbox("Role", ["Administrator", "Basic User"])
-        
-        st.write("📌 **Select Tab Access Privileges:**")
-        pc1, pc2, pc3, pc4 = st.columns(4)
-        with pc1: p_entry = st.checkbox("📝 Record Entry", value=True)
-        with pc2: p_reports = st.checkbox("📊 Reports", value=True)
-        with pc3: p_trash = st.checkbox("🗑️ Deleted Records", value=True)
-        with pc4: p_users = st.checkbox("👤 User Management", value=False)
-        
-        create_user_btn = st.form_submit_button("➕ Create User", use_container_width=True)
-        if create_user_btn:
-            if not new_name or not new_uname or not new_pwd:
-                st.error("All user fields are required!")
-            else:
-                try:
-                    if new_role == "Administrator":
-                        p_users = True
-
-                    cursor.execute(
-                        "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                        (new_name, new_uname, new_pwd, new_role, int(p_entry), int(p_reports), int(p_trash), int(p_users))
-                    )
-                    st.success(f"User '{new_uname}' created successfully!")
-                    st.rerun()
-                except psycopg.IntegrityError:
-                    st.error(f"Username '{new_uname}' already exists.")
-
-    st.markdown("---")
-    st.write("### Existing Users & Privilege Overview")
-    cursor.execute("SELECT user_id, name, username, role, p_entry, p_reports, p_trash, p_users FROM users")
-    users_rows = cursor.fetchall()
-    
-    if users_rows:
-        users_data = []
-        for ur in users_rows:
-            is_admin = (ur[3] == "Administrator" or ur[2] == "admin")
-            users_data.append({
-                "Delete": False,
-                "User ID": ur[0],
-                "Name": ur[1],
-                "Username": ur[2],
-                "Role": ur[3],
-                "Entry": bool(ur[4]),
-                "Reports": bool(ur[5]),
-                "Trash": bool(ur[6]),
-                "Users": True if is_admin else bool(ur[7])
-            })
-        df_users = pd.DataFrame(users_data)
-        
-        edited_users = st.data_editor(
-            df_users,
-            hide_index=True,
-            use_container_width=True,
-            disabled=["User ID", "Name", "Username", "Role"],
-            key="users_editor"
-        )
-        
-        if st.button("💾 Save Privilege Changes", key="save_privs_btn"):
-            validation_error = False
-            for idx, row in edited_users.iterrows():
-                role = row["Role"]
-                uname = row["Username"]
-                is_admin = (role == "Administrator" or uname == "admin")
-                
-                if is_admin and not row["Users"]:
-                    validation_error = True
-                    break
-            
-            if validation_error:
-                st.error("⚠️ Users cannot be left unchecked for Administrator role account.")
-            else:
-                for idx, row in edited_users.iterrows():
-                    u_id = row["User ID"]
-                    uname = row["Username"]
-                    role = row["Role"]
-                    
-                    if uname == 'admin' or role == 'Administrator':
-                        e = 1 if row["Entry"] else 0
-                        r = 1 if row["Reports"] else 0
-                        t = 1 if row["Trash"] else 0
-                        us = 1
-                    else:
-                        e = 1 if row["Entry"] else 0
-                        r = 1 if row["Reports"] else 0
-                        t = 1 if row["Trash"] else 0
-                        us = 1 if row["Users"] else 0
-
-                    cursor.execute(
-                        "UPDATE users SET p_entry = %s, p_reports = %s, p_trash = %s, p_users = %s WHERE user_id = %s",
-                        (e, r, t, us, u_id)
-                    )
-                
-                cursor.execute("SELECT p_entry, p_reports, p_trash, p_users FROM users WHERE username = %s", (st.session_state.username,))
-                p_row = cursor.fetchone()
-                if p_row:
-                    st.session_state.p_entry = p_row[0]
-                    st.session_state.p_reports = p_row[1]
-                    st.session_state.p_trash = p_row[2]
-                    st.session_state.p_users = 1 if st.session_state.role == 'Administrator' else p_row[3]
-
-                st.session_state.priv_success_msg = "✅ Confirmation: User privileges updated successfully!"
-                st.rerun()
-
-        st.write("")
-        admin_selected = edited_users[(edited_users["Delete"] == True) & ((edited_users["Role"] == "Administrator") | (edited_users["Username"] == "admin"))]
-        
-        if not admin_selected.empty:
-            st.error("⚠️ Administrator accounts cannot be selected for deletion!")
-        
-        valid_to_del = edited_users[(edited_users["Delete"] == True) & (edited_users["Role"] != "Administrator") & (edited_users["Username"] != "admin")]
-        users_to_del = valid_to_del["Username"].tolist()
-
-        if users_to_del:
-            if st.button("🗑️ Delete Selected Users", type="primary", key="del_users_btn"):
-                for u in users_to_del:
-                    if u == st.session_state.username:
-                        st.error("You cannot delete your own active account.")
-                    else:
-                        cursor.execute("DELETE FROM users WHERE username = %s", (u,))
-                st.success("Selected user(s) deleted.")
-                st.rerun()
-
-
-# ==========================================
-# DYNAMIC TAB CREATION BASED ON PERMISSIONS
-# ==========================================
-tab_labels = []
-tab_funcs = []
-
-if st.session_state.p_entry == 1:
-    tab_labels.append("📝 Data Entry & Management")
-    tab_funcs.append(render_entry_tab)
-if st.session_state.p_reports == 1:
-    tab_labels.append("📊 Reports & Analytics")
-    tab_funcs.append(render_reports_tab)
-if st.session_state.p_trash == 1:
-    tab_labels.append("🗑️ Deleted Records")
-    tab_funcs.append(render_trash_tab)
-if st.session_state.p_users == 1 or st.session_state.role == "Administrator":
-    tab_labels.append("👤 User Management")
-    tab_funcs.append(render_users_tab)
-
-if tab_labels:
-    active_tabs = st.tabs(tab_labels)
-    for idx, func in enumerate(tab_funcs):
-        with active_tabs[idx]:
-            func()
-else:
-    st.error("Your app has no tab access privileges enabled. Please contact your system administrator.")
+            new_pwd = st.text_input
