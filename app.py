@@ -18,16 +18,22 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- STRICT BUTTON-ONLY CLICK & CUSTOM FILE UPLOADER HELPER TEXT CSS ---
+# --- COMPACT BUTTON-ONLY CLICK & FILE UPLOADER CSS ---
 st.markdown(
     """
     <style>
+    /* Reduce vertical footprint of the file uploader container */
+    [data-testid="stFileUploader"] {
+        padding: 0px !important;
+        margin-bottom: 0px !important;
+    }
     /* Disable clicks on the entire drag-and-drop dropzone box/row */
     [data-testid="stFileUploader"] section {
         pointer-events: none !important;
         background-color: transparent !important;
         border: none !important;
         padding: 0px !important;
+        min-height: unset !important;
     }
     /* Enable clicks strictly on the inner browse/upload button */
     [data-testid="stFileUploader"] section button {
@@ -35,7 +41,8 @@ st.markdown(
         background-color: #1f538d !important;
         color: white !important;
         border-radius: 4px !important;
-        padding: 0.3rem 0.6rem !important;
+        padding: 0.25rem 0.6rem !important;
+        font-size: 13px !important;
         border: none !important;
     }
     [data-testid="stFileUploader"] section button:hover {
@@ -58,7 +65,7 @@ st.markdown(
         left: 0 !important;
         top: 0 !important;
         color: #555 !important;
-        font-size: 11px !important;
+        font-size: 10px !important;
     }
     /* Style form/action buttons blue */
     div.stButton > button {
@@ -362,7 +369,7 @@ def render_entry_tab():
                 st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
                 if uploaded_file.type == "application/pdf":
                     st.download_button(
-                        "📥 Download / View Uploaded PDF",
+                        "📥 Open / Download Uploaded PDF",
                         data=uploaded_file.getvalue(),
                         file_name=uploaded_file.name,
                         mime="application/pdf",
@@ -385,7 +392,7 @@ def render_entry_tab():
                 file_bytes = fp.read()
             if file_name_lower.endswith(".pdf"):
                 st.download_button(
-                    "📥 Download / View Attached PDF",
+                    "📥 Open / Download Attached PDF",
                     data=file_bytes,
                     file_name=os.path.basename(active_file_path),
                     mime="application/pdf",
