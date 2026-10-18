@@ -280,10 +280,13 @@ def is_expired(noc_date_str, validity_val):
         return False
 
 def reset_form_state():
-    for k in ["f_noc", "f_date", "f_org", "f_val", "f_gsps", "f_reg", "f_pdf", "fetch_id_input"]:
-        if k in st.session_state:
-            st.session_state[k] = "" if isinstance(st.session_state[k], str) else 0
+    st.session_state.f_noc = ""
+    st.session_state.f_date = ""
+    st.session_state.f_org = ""
     st.session_state.f_val = 0
+    st.session_state.f_gsps = ""
+    st.session_state.f_reg = ""
+    st.session_state.f_pdf = ""
     st.session_state.fetch_id_input = ""
     st.session_state.last_fetched_id = ""
     st.session_state.upload_reset_counter += 1
