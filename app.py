@@ -265,21 +265,27 @@ def render_entry_tab():
         with c6: region = st.text_input("Allowed Region*", key="f_reg")
 
         uploaded_file = st.file_uploader(
-            "Upload Document (PDF or JPG/JPEG)", 
+            "Upload Document (PDF or JPG/JPEG, Max 20MB)", 
             type=["pdf", "jpg", "jpeg"], 
             key=f"pdf_uploader_{st.session_state.upload_reset_counter}"
         )
         
+        file_oversized = False
         if uploaded_file is not None:
-            st.markdown(f'<span style="color: #1f538d; font-weight: bold;">📎 Uploaded File: {uploaded_file.name}</span>', unsafe_allow_html=True)
-            if uploaded_file.type == "application/pdf":
-                with st.expander("👁️ Preview PDF Document"):
-                    base64_pdf = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
-                    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="400px" type="application/pdf"></iframe>'
-                    st.markdown(pdf_display, unsafe_allow_html=True)
+            # 20 MB restriction check (20 * 1024 * 1024 bytes)
+            if uploaded_file.size > 20 * 1024 * 1024:
+                file_oversized = True
+                st.error("⚠️ File size exceeds the 20 MB limit. Please upload a smaller file.")
             else:
-                with st.expander("👁️ Preview Image"):
-                    st.image(uploaded_file, caption=uploaded_file.name, use_container_width=True)
+                st.markdown(f'<span style="color: #1f538d; font-weight: bold;">📎 Uploaded File: {uploaded_file.name}</span>', unsafe_allow_html=True)
+                if uploaded_file.type == "application/pdf":
+                    with st.expander("👁️ Preview PDF Document"):
+                        base64_pdf = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+                        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="400px" type="application/pdf"></iframe>'
+                        st.markdown(pdf_display, unsafe_allow_html=True)
+                else:
+                    with st.expander("👁️ Preview Image"):
+                        st.image(uploaded_file, caption=uploaded_file.name, use_container_width=True)
 
         shared_noc_copy = ""
         if noc_num.strip() and noc_date.strip():
@@ -322,6 +328,8 @@ def render_entry_tab():
         if save_btn:
             if fetch_id.strip():
                 st.error("⚠️ Please clear the 'Fetch by Record ID' field or click Clear before saving a new entry.")
+            elif file_oversized:
+                st.error("⚠️ Cannot save: Uploaded file exceeds the 20 MB limit.")
             elif not noc_num or not noc_date or not org or not gsps_num or not region:
                 st.error("All mandatory fields must be filled out before saving or uploading a file!")
             elif not validate_date(noc_date):
@@ -363,6 +371,8 @@ def render_entry_tab():
         if update_btn:
             if not fetch_id.strip() or not fetch_id.isdigit():
                 st.error("Please enter a valid numeric Record ID in 'Fetch by Record ID' above to update.")
+            elif file_oversized:
+                st.error("⚠️ Cannot update: Uploaded file exceeds the 20 MB limit.")
             elif not noc_num or not noc_date or not org or not gsps_num or not region:
                 st.error("All mandatory fields must be filled out before updating!")
             elif "," in gsps_num:
@@ -803,6 +813,9 @@ def render_users_tab():
 tab_labels = []
 tab_funcs = []
 
+if file_oversized := False: # Placeholder context guard
+    pass
+
 if st.session_state.p_entry == 1:
     tab_labels.append("📝 Data Entry & Management")
     tab_funcs.append(render_entry_tab)
@@ -822,4 +835,4 @@ if tab_labels:
         with active_tabs[idx]:
             func()
 else:
-    st.error("Your account has no tab access privileges enabled. Please contact your system administrator.")
+    st.error("Your app has no tab access privileges enabled. Please contact your system administrator.")
