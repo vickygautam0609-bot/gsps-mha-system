@@ -280,10 +280,13 @@ def check_duplicate(noc_num, noc_date_val, gsps_val, region_val, exclude_id=None
             return True
     return False
 
-def get_existing_noc_copy(noc_num, noc_date):
-    if not noc_num.strip() or not noc_date.strip():
+def get_existing_noc_copy(noc_num, noc_date, org_name):
+    if not noc_num.strip() or not noc_date.strip() or not org_name.strip():
         return ""
-    cursor.execute("SELECT mha_noc_copy FROM n_records WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND mha_noc_copy != '' AND mha_noc_copy IS NOT NULL LIMIT 1", (noc_num.strip().upper(), noc_date.strip()))
+    cursor.execute(
+        "SELECT mha_noc_copy FROM n_records WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND mha_noc_copy != '' AND mha_noc_copy IS NOT NULL LIMIT 1", 
+        (noc_num.strip().upper(), noc_date.strip(), org_name.strip().upper())
+    )
     res = cursor.fetchone()
     return res[0] if res else ""
 
@@ -404,10 +407,10 @@ def render_entry_tab():
                         key="preview_uploaded_img"
                     )
 
-        # Automatically check and fetch shared document path for this MHA NOC Number + Date combination
+        # Automatically check and fetch shared document path for this MHA NOC Number + Date + Organisation combination
         shared_noc_copy = ""
-        if noc_num.strip() and noc_date.strip():
-            shared_noc_copy = get_existing_noc_copy(noc_num.strip(), noc_date.strip())
+        if noc_num.strip() and noc_date.strip() and org.strip():
+            shared_noc_copy = get_existing_noc_copy(noc_num.strip(), noc_date.strip(), org.strip())
 
         active_file_path = st.session_state.get("f_pdf", "") or shared_noc_copy
 
@@ -478,13 +481,14 @@ def render_entry_tab():
                             conflict = True
                             break
                     if not conflict:
-                        old_noc_copy = get_existing_noc_copy(clean_noc_num, noc_date)
+                        old_noc_copy = get_existing_noc_copy(clean_noc_num, noc_date, clean_org)
                         final_pdf_path = shared_noc_copy
                         if uploaded_file is not None and not file_error:
                             safe_noc = clean_noc_num.replace("/", "_").replace("\\", "_")
                             safe_date = noc_date.replace(".", "_")
+                            safe_org = clean_org.replace("/", "_").replace("\\", "_").replace(" ", "_")
                             ext = os.path.splitext(uploaded_file.name)[1].lower()
-                            filename = f"NOC_{safe_noc}_{safe_date}{ext}"
+                            filename = f"NOC_{safe_noc}_{safe_date}_{safe_org}{ext}"
                             final_pdf_path = os.path.join(UPLOAD_DIR, filename)
                             
                             if old_noc_copy and os.path.exists(old_noc_copy) and os.path.abspath(old_noc_copy) != os.path.abspath(final_pdf_path):
@@ -503,11 +507,11 @@ def render_entry_tab():
                                 (clean_noc_num, noc_date, clean_org, str(validity), g, clean_region, final_pdf_path, st.session_state.name, st.session_state.name)
                             )
                         
-                        # Automatically propagate document path to ALL existing entries sharing this MHA NOC Number and Date combination
+                        # Automatically propagate document path to ALL existing entries sharing this MHA NOC Number, Date, and Organisation combination
                         if final_pdf_path:
                             cursor.execute(
-                                "UPDATE n_records SET mha_noc_copy = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND status = 'ACTIVE'",
-                                (final_pdf_path, clean_noc_num, noc_date)
+                                "UPDATE n_records SET mha_noc_copy = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
+                                (final_pdf_path, clean_noc_num, noc_date, clean_org)
                             )
                         
                         st.toast(f"Successfully saved {len(gsps_list)} record(s) for NOC '{clean_noc_num}'!", icon="✅")
@@ -546,13 +550,14 @@ def render_entry_tab():
                 if check_duplicate(clean_noc_num, noc_date, single_gsps, clean_region, exclude_id=target_id):
                     st.error("Another active record with these details (NOC, Date, GSPS, Region) already exists!")
                 else:
-                    old_noc_copy = get_existing_noc_copy(clean_noc_num, noc_date)
+                    old_noc_copy = get_existing_noc_copy(clean_noc_num, noc_date, clean_org)
                     final_pdf_path = shared_noc_copy
                     if uploaded_file is not None and not file_error:
                         safe_noc = clean_noc_num.replace("/", "_").replace("\\", "_")
                         safe_date = noc_date.replace(".", "_")
+                        safe_org = clean_org.replace("/", "_").replace("\\", "_").replace(" ", "_")
                         ext = os.path.splitext(uploaded_file.name)[1].lower()
-                        filename = f"NOC_{safe_noc}_{safe_date}{ext}"
+                        filename = f"NOC_{safe_noc}_{safe_date}_{safe_org}{ext}"
                         final_pdf_path = os.path.join(UPLOAD_DIR, filename)
                         
                         if old_noc_copy and os.path.exists(old_noc_copy) and os.path.abspath(old_noc_copy) != os.path.abspath(final_pdf_path):
@@ -571,11 +576,11 @@ def render_entry_tab():
                         (clean_noc_num, noc_date, clean_org, str(validity), single_gsps, clean_region, final_pdf_path, st.session_state.name, target_id)
                     )
                     
-                    # Propagate document path and shared attributes across ALL entries sharing this MHA NOC Number and Date combination
+                    # Propagate document path and shared attributes across ALL entries sharing this MHA NOC Number, Date, and Organisation combination
                     if final_pdf_path:
                         cursor.execute(
-                            "UPDATE n_records SET mha_noc_copy = %s, organisation = %s, validity = %s, allowed_region = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND status = 'ACTIVE'",
-                            (final_pdf_path, clean_org, str(validity), clean_region, clean_noc_num, noc_date)
+                            "UPDATE n_records SET mha_noc_copy = %s, validity = %s, allowed_region = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
+                            (final_pdf_path, str(validity), clean_region, clean_noc_num, noc_date, clean_org)
                         )
                     
                     st.toast(f"Record ID #{target_id} and all linked NOC entries updated successfully!", icon="✅")
