@@ -281,6 +281,8 @@ def check_duplicate(noc_num, noc_date_val, gsps_val, region_val, exclude_id=None
     return False
 
 def get_existing_noc_copy(noc_num, noc_date):
+    if not noc_num.strip() or not noc_date.strip():
+        return ""
     cursor.execute("SELECT mha_noc_copy FROM n_records WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND mha_noc_copy != '' AND mha_noc_copy IS NOT NULL LIMIT 1", (noc_num.strip().upper(), noc_date.strip()))
     res = cursor.fetchone()
     return res[0] if res else ""
@@ -363,13 +365,13 @@ def render_entry_tab():
         st.markdown("**GSPS Numbers and Permitted Restricted Areas**")
         gsps_num = st.text_area("GSPS Number(s) (Comma/Newline sep)*", key="f_gsps", height=65, placeholder="Enter 10-digit GSPS numbers...")
 
-        # Parallel Row for Allowed Region and Upload Button
+        # Parallel Row for Allowed Region and MHA NOC Upload Button
         r_col1, r_col2 = st.columns([1, 1])
         with r_col1:
             region = st.text_input("Allowed Region*", key="f_reg", placeholder="Pan India / North")
         with r_col2:
             uploaded_file = st.file_uploader(
-                "Document Attachment", 
+                "MHA NOC Upload", 
                 type=["pdf", "jpg", "jpeg"], 
                 key=f"pdf_uploader_{st.session_state.upload_reset_counter}"
             )
@@ -402,6 +404,7 @@ def render_entry_tab():
                         key="preview_uploaded_img"
                     )
 
+        # Automatically check and fetch shared document path for this MHA NOC Number + Date combination
         shared_noc_copy = ""
         if noc_num.strip() and noc_date.strip():
             shared_noc_copy = get_existing_noc_copy(noc_num.strip(), noc_date.strip())
@@ -409,11 +412,11 @@ def render_entry_tab():
         active_file_path = st.session_state.get("f_pdf", "") or shared_noc_copy
 
         if uploaded_file is None and active_file_path and os.path.exists(active_file_path):
-            st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Attached: {os.path.basename(active_file_path)}</span>', unsafe_allow_html=True)
+            st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Linked NOC Document Attached: {os.path.basename(active_file_path)}</span>', unsafe_allow_html=True)
             with open(active_file_path, "rb") as fp:
                 file_bytes = fp.read()
             st.download_button(
-                "📥 Download Attached File",
+                "📥 Download Linked NOC Document",
                 data=file_bytes,
                 file_name=os.path.basename(active_file_path),
                 mime="application/octet-stream",
@@ -500,6 +503,13 @@ def render_entry_tab():
                                 (clean_noc_num, noc_date, clean_org, str(validity), g, clean_region, final_pdf_path, st.session_state.name, st.session_state.name)
                             )
                         
+                        # Automatically propagate document path to ALL existing entries sharing this MHA NOC Number and Date combination
+                        if final_pdf_path:
+                            cursor.execute(
+                                "UPDATE n_records SET mha_noc_copy = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND status = 'ACTIVE'",
+                                (final_pdf_path, clean_noc_num, noc_date)
+                            )
+                        
                         st.toast(f"Successfully saved {len(gsps_list)} record(s) for NOC '{clean_noc_num}'!", icon="✅")
                         reset_form_state()
                         st.rerun()
@@ -555,12 +565,20 @@ def render_entry_tab():
                             f.write(uploaded_file.getbuffer())
                         st.session_state["f_pdf"] = final_pdf_path
 
+                    # Update the specific target record
                     cursor.execute(
                         "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, mha_noc_copy = %s, modified_by = %s WHERE record_id = %s",
                         (clean_noc_num, noc_date, clean_org, str(validity), single_gsps, clean_region, final_pdf_path, st.session_state.name, target_id)
                     )
                     
-                    st.toast(f"Record ID #{target_id} updated successfully!", icon="✅")
+                    # Propagate document path and shared attributes across ALL entries sharing this MHA NOC Number and Date combination
+                    if final_pdf_path:
+                        cursor.execute(
+                            "UPDATE n_records SET mha_noc_copy = %s, organisation = %s, validity = %s, allowed_region = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND status = 'ACTIVE'",
+                            (final_pdf_path, clean_org, str(validity), clean_region, clean_noc_num, noc_date)
+                        )
+                    
+                    st.toast(f"Record ID #{target_id} and all linked NOC entries updated successfully!", icon="✅")
                     reset_form_state()
                     st.rerun()
 
