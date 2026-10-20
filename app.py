@@ -175,7 +175,8 @@ if "logged_in" not in st.session_state:
 
 for key, default_val in [
     ("f_noc", ""), ("f_date", ""), ("f_org", ""), 
-    ("f_val", 0), ("f_gsps", ""), ("f_reg", ""), 
+    ("f_val_y", 0), ("f_val_m", 0), ("f_val_d", 0), 
+    ("f_gsps", ""), ("f_reg", ""), 
     ("f_pdf", ""), ("fetch_id_input", ""), 
     ("last_fetched_id", ""), 
     ("upload_reset_counter", 0), ("trigger_reset", False),
@@ -269,6 +270,38 @@ def validate_gsps(gsps_val):
             return False
     return True
 
+def parse_validity(val_str):
+    """Parses validity string formatted as 'Y years, M months, D days' into integer tuple (y, m, d)."""
+    if not val_str:
+        return 0, 0, 0
+    y, m, d = 0, 0, 0
+    try:
+        parts = str(val_str).split(",")
+        for p in parts:
+            p = p.strip()
+            if "year" in p.lower():
+                y = int(p.split()[0])
+            elif "month" in p.lower():
+                m = int(p.split()[0])
+            elif "day" in p.lower():
+                d = int(p.split()[0])
+    except Exception:
+        # Fallback if it was saved as a legacy pure number string
+        if str(val_str).isdigit():
+            y = int(val_str)
+    return y, m, d
+
+def format_validity(y, m, d):
+    """Formats years, months, days into a clean readable string."""
+    chunks = []
+    if y > 0:
+        chunks.append(f"{y} year{'s' if y > 1 else ''}")
+    if m > 0:
+        chunks.append(f"{m} month{'s' if m > 1 else ''}")
+    if d > 0:
+        chunks.append(f"{d} day{'s' if d > 1 else ''}")
+    return ", ".join(chunks) if chunks else "0 Days"
+
 def check_duplicate(noc_num, noc_date_val, gsps_val, region_val, exclude_id=None):
     clean_noc = noc_num.strip().upper()
     clean_date = noc_date_val.strip()
@@ -320,12 +353,15 @@ def upload_file_to_supabase(file_obj, filename):
             st.error(f"Storage Upload Error: {err}")
             return ""
 
-def is_expired(noc_date_str, validity_val):
-    if not validity_val or not str(validity_val).isdigit():
+def is_expired(noc_date_str, validity_str):
+    if not validity_str:
+        return False
+    y, m, d = parse_validity(validity_str)
+    if y == 0 and m == 0 and d == 0:
         return False
     try:
         noc_dt = datetime.strptime(noc_date_str, "%d.%m.%Y")
-        expiry_dt = noc_dt + relativedelta(years=int(validity_val))
+        expiry_dt = noc_dt + relativedelta(years=y, months=m, days=d)
         return datetime.now() > expiry_dt
     except ValueError:
         return False
@@ -354,7 +390,13 @@ def on_fetch_id_change():
             st.session_state["f_noc"] = fetched_data[0]
             st.session_state["f_date"] = fetched_data[1]
             st.session_state["f_org"] = fetched_data[2]
-            st.session_state["f_val"] = int(fetched_data[3]) if fetched_data[3] and str(fetched_data[3]).isdigit() else 0
+            
+            # Parse validity string into Y, M, D components
+            val_y, val_m, val_d = parse_validity(fetched_data[3])
+            st.session_state["f_val_y"] = val_y
+            st.session_state["f_val_m"] = val_m
+            st.session_state["f_val_d"] = val_d
+
             st.session_state["f_gsps"] = fetched_data[4]
             st.session_state["f_reg"] = fetched_data[5]
             st.session_state["f_pdf"] = fetched_data[6] if fetched_data[6] else ""
@@ -373,7 +415,9 @@ def render_entry_tab():
         st.session_state["f_noc"] = ""
         st.session_state["f_date"] = ""
         st.session_state["f_org"] = ""
-        st.session_state["f_val"] = 0
+        st.session_state["f_val_y"] = 0
+        st.session_state["f_val_m"] = 0
+        st.session_state["f_val_d"] = 0
         st.session_state["f_gsps"] = ""
         st.session_state["f_reg"] = ""
         st.session_state["f_pdf"] = ""
@@ -393,7 +437,16 @@ def render_entry_tab():
             org = st.text_input("Organisation*", key="f_org", placeholder="e.g., BSNL / Inmarsat")
         with col2:
             noc_date = st.text_input("NOC Date (DD.MM.YYYY)*", key="f_date", placeholder="DD.MM.YYYY")
-            validity = st.number_input("Validity (Years)", min_value=0, step=1, format="%d", key="f_val")
+            
+            # Validity breakdown layout (Years, Months, Days)
+            st.markdown("Validity Period*")
+            v_col1, v_col2, v_col3 = st.columns(3)
+            with v_col1:
+                val_years = st.number_input("Years", min_value=0, step=1, format="%d", key="f_val_y")
+            with v_col2:
+                val_months = st.number_input("Months", min_value=0, max_level=11, step=1, format="%d", key="f_val_m")
+            with v_col3:
+                val_days = st.number_input("Days", min_value=0, max_level=31, step=1, format="%d", key="f_val_d")
 
         st.markdown("**GSPS Numbers and Permitted Restricted Areas**")
         gsps_num = st.text_area("GSPS Number(s) (Comma/Newline sep)*", key="f_gsps", height=65, placeholder="Enter 10-digit GSPS numbers...")
@@ -457,8 +510,9 @@ def render_entry_tab():
             reset_form_state()
             st.rerun()
 
+        validity_str = format_validity(int(val_years), int(val_months), int(val_days))
+
         if save_btn:
-            # Force uppercase conversion for MHA NOC Number, Organisation, and Allowed Region
             clean_noc_num = noc_num.strip().upper()
             clean_org = org.strip().upper()
             clean_region = region.strip().upper()
@@ -469,6 +523,8 @@ def render_entry_tab():
                 st.error("⚠️ Cannot save: Please fix the file attachment errors above.")
             elif not clean_noc_num or not noc_date or not clean_org or not gsps_num or not clean_region:
                 st.error("All mandatory fields must be filled out before saving or uploading a file!")
+            elif int(val_years) == 0 and int(val_months) == 0 and int(val_days) == 0:
+                st.error("⚠️ Validity period must be greater than zero (provide Years, Months, or Days).")
             elif not validate_date(noc_date):
                 st.error("Invalid date format! Use DD.MM.YYYY.")
             elif datetime.strptime(noc_date, "%d.%m.%Y").date() > datetime.now().date():
@@ -502,7 +558,7 @@ def render_entry_tab():
                         for g in gsps_list:
                             cursor.execute(
                                 "INSERT INTO n_records (mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, mha_noc_copy, status, created_by, modified_by) VALUES (%s, %s, %s, %s, %s, %s, %s, 'ACTIVE', %s, %s)",
-                                (clean_noc_num, noc_date, clean_org, str(validity), g, clean_region, final_pdf_path, st.session_state.name, st.session_state.name)
+                                (clean_noc_num, noc_date, clean_org, validity_str, g, clean_region, final_pdf_path, st.session_state.name, st.session_state.name)
                             )
                         
                         if final_pdf_path:
@@ -516,12 +572,10 @@ def render_entry_tab():
                         st.rerun()
 
         if update_btn:
-            # Force uppercase conversion for MHA NOC Number, Organisation, and Allowed Region
             clean_noc_num = noc_num.strip().upper()
             clean_org = org.strip().upper()
             clean_region = region.strip().upper()
 
-            # Parse GSPS list allowing single entries even if trailing comma/newline exists
             parsed_gsps_list = [g.strip() for g in gsps_num.replace("\n", ",").split(",") if g.strip()]
 
             if not fetch_id.strip() or not fetch_id.strip().isdigit():
@@ -533,6 +587,8 @@ def render_entry_tab():
                 st.error("⚠️ Cannot update: Please fix the file attachment errors above.")
             elif not clean_noc_num or not noc_date or not clean_org or not gsps_num or not clean_region:
                 st.error("All mandatory fields must be filled out before updating!")
+            elif int(val_years) == 0 and int(val_months) == 0 and int(val_days) == 0:
+                st.error("⚠️ Validity period must be greater than zero (provide Years, Months, or Days).")
             elif len(parsed_gsps_list) > 1:
                 st.error("Bulk entries with multiple numbers are only allowed when saving new records. Please provide a single GSPS number for updates.")
             elif not validate_date(noc_date):
@@ -559,13 +615,12 @@ def render_entry_tab():
                         final_pdf_path = upload_file_to_supabase(uploaded_file, filename)
                         st.session_state["f_pdf"] = final_pdf_path
 
-                    # 1. Update ONLY this specific target record ID with its fields (GSPS number, etc.)
+                    # Update target record ID with its specific fields & validity string
                     cursor.execute(
                         "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, mha_noc_copy = %s, modified_by = %s WHERE record_id = %s",
-                        (clean_noc_num, noc_date, clean_org, str(validity), single_gsps, clean_region, final_pdf_path, st.session_state.name, target_id)
+                        (clean_noc_num, noc_date, clean_org, validity_str, single_gsps, clean_region, final_pdf_path, st.session_state.name, target_id)
                     )
                     
-                    # 2. Propagate ONLY the file attachment across all rows sharing the exact same NOC, Date, and Org combination
                     if final_pdf_path:
                         cursor.execute(
                             "UPDATE n_records SET mha_noc_copy = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
@@ -607,7 +662,7 @@ def render_entry_tab():
             "NOC Number": noc,
             "NOC Date": dt,
             "Organisation": org_name,
-            "Validity (Yrs)": val,
+            "Validity": val,
             "GSPS Number": gsps,
             "Allowed Region": reg,
             "PDF Copy": pdf_display,
@@ -618,8 +673,6 @@ def render_entry_tab():
 
     if filtered_data:
         df_active = pd.DataFrame(filtered_data)
-        
-        # Disable editing on all columns except "Select" so users cannot change fields by clicking cells
         disabled_cols = [col for col in df_active.columns if col != "Select"]
         
         edited_df = st.data_editor(
@@ -690,7 +743,7 @@ def render_reports_tab():
                     <strong>MHA NOC Number:</strong> <span style="color: #1f538d;">{noc}</span> &nbsp;&nbsp;|&nbsp;&nbsp; 
                     <strong>Date:</strong> {dt} &nbsp;&nbsp;|&nbsp;&nbsp; 
                     <strong>Organisation:</strong> {org} &nbsp;&nbsp;|&nbsp;&nbsp; 
-                    <strong>Validity:</strong> {val if val else 'N/A'} Yrs
+                    <strong>Validity:</strong> {val if val else 'N/A'}
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -713,7 +766,7 @@ def render_reports_tab():
                     "MHA NOC Number": noc,
                     "NOC Date": dt,
                     "Organisation": org,
-                    "Validity (Yrs)": val if val else "N/A",
+                    "Validity": val if val else "N/A",
                     "GSPS Number": gsps,
                     "Allowed Region": reg
                 })
@@ -754,12 +807,12 @@ def render_reports_tab():
                     Paragraph(str(row["MHA NOC Number"]), ParagraphStyle('C', parent=styles['Normal'], fontSize=9, alignment=1)),
                     Paragraph(str(row["NOC Date"]), ParagraphStyle('C', parent=styles['Normal'], fontSize=9, alignment=1)),
                     Paragraph(str(row["Organisation"]), ParagraphStyle('C', parent=styles['Normal'], fontSize=9, alignment=1)),
-                    Paragraph(str(row["Validity (Yrs)"]), ParagraphStyle('C', parent=styles['Normal'], fontSize=9, alignment=1)),
+                    Paragraph(str(row["Validity"]), ParagraphStyle('C', parent=styles['Normal'], fontSize=9, alignment=1)),
                     Paragraph(str(row["GSPS Number"]), ParagraphStyle('C', parent=styles['Normal'], fontSize=9, alignment=1)),
                     Paragraph(str(row["Allowed Region"]), ParagraphStyle('C', parent=styles['Normal'], fontSize=9, alignment=1)),
                 ])
             
-            t = Table(table_data, colWidths=[45, 120, 95, 160, 60, 110, 150])
+            t = Table(table_data, colWidths=[45, 120, 95, 150, 80, 110, 140])
             t.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f538d')),
                 ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#aed6f1')),
@@ -787,7 +840,7 @@ def render_trash_tab():
                 "NOC Number": r[1],
                 "NOC Date": r[2],
                 "Organisation": r[3],
-                "Validity (Yrs)": r[4],
+                "Validity": r[4],
                 "GSPS Number": r[5],
                 "Allowed Region": r[6],
                 "Created By": r[7],
