@@ -19,7 +19,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- STRICT BUTTON-ONLY CLICK, CUSTOM UPLOAD TEXT & HEADER CSS ---
+# --- STRICT BUTTON-ONLY CLICK, CUSTOM UPLOAD TEXT & TABLE HEADER CSS ---
 st.markdown(
     """
     <style>
@@ -70,7 +70,7 @@ st.markdown(
         background-color: #163d6b !important;
         color: white !important;
     }
-    /* Color data table / editor headers */
+    /* Color data table / editor headers blue */
     [data-testid="stDataEditor"] [role="columnheader"] {
         background-color: #1f538d !important;
         color: white !important;
