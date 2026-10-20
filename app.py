@@ -10,6 +10,7 @@ from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
+from supabase import create_client, Client
 
 # --- PAGE CONFIG ---
 st.set_page_config(
@@ -74,11 +75,16 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- DIRECTORY SETUP FOR COPIES ---
-UPLOAD_DIR = "uploaded_nocs"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# --- SUPABASE STORAGE & DATABASE SETUP ---
+@st.cache_resource
+def get_supabase_client():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
-# --- DATABASE SETUP (SUPABASE POSTGRESQL - SAFE DEBUGGER) ---
+supabase_client = get_supabase_client()
+BUCKET_NAME = "noc_documents"
+
 @st.cache_resource
 def get_db_connection():
     db_url = st.secrets["SUPABASE_DB_URL"]
@@ -91,10 +97,6 @@ def get_db_connection():
         return conn
     except Exception as e:
         st.error("🚨 **Database Connection Error!**")
-        st.markdown("Please check your **Streamlit Secrets (`SUPABASE_DB_URL`)**. Common fixes:")
-        st.markdown("1. Ensure you removed any square brackets `[]` around your password.")
-        st.markdown("2. Ensure you are using the **Session Pooler** URI from Supabase (Port `6543`).")
-        st.markdown("3. Check if your password contains special characters that need URL encoding.")
         st.code(f"Technical Error: {e}", language="text")
         st.stop()
 
@@ -143,7 +145,7 @@ if "p_entry" not in user_cols:
 if "status" not in user_cols:
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ACTIVE'")
 
-# Insert default admin user if table is empty, and ensure admin always has User Management privilege locked on
+# Insert default admin user if table is empty
 cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'ADMIN'")
 if cursor.fetchone()[0] == 0:
     cursor.execute(
@@ -290,6 +292,32 @@ def get_existing_noc_copy(noc_num, noc_date, org_name):
     res = cursor.fetchone()
     return res[0] if res else ""
 
+def upload_file_to_supabase(file_obj, filename):
+    """Uploads file buffer to Supabase Storage bucket and returns public URL."""
+    try:
+        file_bytes = file_obj.getvalue()
+        # Upload file to Supabase bucket
+        supabase_client.storage.from_(BUCKET_NAME).upload(
+            path=filename,
+            file=file_bytes,
+            file_options={"content-type": file_obj.type, "upsert": "true"}
+        )
+        # Get public URL
+        public_url = supabase_client.storage.from_(BUCKET_NAME).get_public_url(filename)
+        return public_url
+    except Exception as e:
+        # If file already exists or update happens, try updating it
+        try:
+            supabase_client.storage.from_(BUCKET_NAME).update(
+                path=filename,
+                file=file_obj.getvalue(),
+                file_options={"content-type": file_obj.type, "upsert": "true"}
+            )
+            return supabase_client.storage.from_(BUCKET_NAME).get_public_url(filename)
+        except Exception as err:
+            st.error(f"Storage Upload Error: {err}")
+            return ""
+
 def is_expired(noc_date_str, validity_val):
     if not validity_val or not str(validity_val).isdigit():
         return False
@@ -304,7 +332,6 @@ def reset_form_state():
     st.session_state["trigger_reset"] = True
 
 def on_fetch_id_change():
-    """Callback triggered when user enters a Record ID next to the Update button."""
     fetch_val = st.session_state.get("fetch_id_input", "").strip()
     if not fetch_val:
         st.session_state["last_fetched_id"] = ""
@@ -338,7 +365,6 @@ def on_fetch_id_change():
 # TAB BUILDER FUNCTIONS
 # ==========================================
 def render_entry_tab():
-    # Execute safe reset BEFORE any widgets are instantiated
     if st.session_state.get("trigger_reset", False):
         st.session_state["f_noc"] = ""
         st.session_state["f_date"] = ""
@@ -354,7 +380,6 @@ def render_entry_tab():
 
     st.subheader("Record Entry & Management")
 
-    # --- COMPACT STRUCTURED FORM CONTAINER ---
     with st.container():
         st.markdown("**MHA NOC Information**")
         col1, col2 = st.columns(2)
@@ -368,7 +393,6 @@ def render_entry_tab():
         st.markdown("**GSPS Numbers and Permitted Restricted Areas**")
         gsps_num = st.text_area("GSPS Number(s) (Comma/Newline sep)*", key="f_gsps", height=65, placeholder="Enter 10-digit GSPS numbers...")
 
-        # Parallel Row for Allowed Region and MHA NOC Upload Button
         r_col1, r_col2 = st.columns([1, 1])
         with r_col1:
             region = st.text_input("Allowed Region*", key="f_reg", placeholder="Pan India / North")
@@ -390,44 +414,18 @@ def render_entry_tab():
                 st.error("⚠️ Error: File size exceeds the 5 MB limit. Please attach a smaller file.")
             else:
                 st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
-                if uploaded_file.type == "application/pdf":
-                    st.download_button(
-                        "📥 Download Uploaded PDF",
-                        data=uploaded_file.getvalue(),
-                        file_name=uploaded_file.name,
-                        mime="application/pdf",
-                        key="preview_uploaded_pdf"
-                    )
-                else:
-                    st.download_button(
-                        "📥 Download Uploaded Image",
-                        data=uploaded_file.getvalue(),
-                        file_name=uploaded_file.name,
-                        mime="application/octet-stream",
-                        key="preview_uploaded_img"
-                    )
 
-        # Automatically check and fetch shared document path for this MHA NOC Number + Date + Organisation combination
         shared_noc_copy = ""
         if noc_num.strip() and noc_date.strip() and org.strip():
             shared_noc_copy = get_existing_noc_copy(noc_num.strip(), noc_date.strip(), org.strip())
 
         active_file_path = st.session_state.get("f_pdf", "") or shared_noc_copy
 
-        if uploaded_file is None and active_file_path and os.path.exists(active_file_path):
-            st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Linked NOC Document Attached: {os.path.basename(active_file_path)}</span>', unsafe_allow_html=True)
-            with open(active_file_path, "rb") as fp:
-                file_bytes = fp.read()
-            st.download_button(
-                "📥 Download Linked NOC Document",
-                data=file_bytes,
-                file_name=os.path.basename(active_file_path),
-                mime="application/octet-stream",
-                key="preview_attached_file"
-            )
+        if uploaded_file is None and active_file_path:
+            st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Linked NOC Document Attached in Cloud</span>', unsafe_allow_html=True)
+            st.markdown(f"[🔗 Open / Download Linked Document]({active_file_path})")
 
         st.markdown("")
-        # Action Bar: Save | Fetch Record ID (paired right next to Update) | Update | Clear
         b1, b_fetch, b2, b3 = st.columns([1.2, 1.1, 1.2, 1])
         with b1:
             st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
@@ -452,7 +450,6 @@ def render_entry_tab():
             st.rerun()
 
         if save_btn:
-            # Force uppercase conversion for MHA NOC Number, Organisation, and Allowed Region
             clean_noc_num = noc_num.strip().upper()
             clean_org = org.strip().upper()
             clean_region = region.strip().upper()
@@ -489,16 +486,9 @@ def render_entry_tab():
                             safe_org = clean_org.replace("/", "_").replace("\\", "_").replace(" ", "_")
                             ext = os.path.splitext(uploaded_file.name)[1].lower()
                             filename = f"NOC_{safe_noc}_{safe_date}_{safe_org}{ext}"
-                            final_pdf_path = os.path.join(UPLOAD_DIR, filename)
                             
-                            if old_noc_copy and os.path.exists(old_noc_copy) and os.path.abspath(old_noc_copy) != os.path.abspath(final_pdf_path):
-                                try:
-                                    os.remove(old_noc_copy)
-                                except Exception:
-                                    pass
-
-                            with open(final_pdf_path, "wb") as f:
-                                f.write(uploaded_file.getbuffer())
+                            # Upload to Supabase Storage
+                            final_pdf_path = upload_file_to_supabase(uploaded_file, filename)
                             st.session_state["f_pdf"] = final_pdf_path
 
                         for g in gsps_list:
@@ -507,7 +497,6 @@ def render_entry_tab():
                                 (clean_noc_num, noc_date, clean_org, str(validity), g, clean_region, final_pdf_path, st.session_state.name, st.session_state.name)
                             )
                         
-                        # Automatically propagate document path to ALL existing entries sharing this MHA NOC Number, Date, and Organisation combination
                         if final_pdf_path:
                             cursor.execute(
                                 "UPDATE n_records SET mha_noc_copy = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
@@ -519,12 +508,10 @@ def render_entry_tab():
                         st.rerun()
 
         if update_btn:
-            # Force uppercase conversion for MHA NOC Number, Organisation, and Allowed Region
             clean_noc_num = noc_num.strip().upper()
             clean_org = org.strip().upper()
             clean_region = region.strip().upper()
 
-            # Parse GSPS list allowing single entries even if trailing comma/newline exists
             parsed_gsps_list = [g.strip() for g in gsps_num.replace("\n", ",").split(",") if g.strip()]
 
             if not fetch_id.strip() or not fetch_id.strip().isdigit():
@@ -558,25 +545,16 @@ def render_entry_tab():
                         safe_org = clean_org.replace("/", "_").replace("\\", "_").replace(" ", "_")
                         ext = os.path.splitext(uploaded_file.name)[1].lower()
                         filename = f"NOC_{safe_noc}_{safe_date}_{safe_org}{ext}"
-                        final_pdf_path = os.path.join(UPLOAD_DIR, filename)
                         
-                        if old_noc_copy and os.path.exists(old_noc_copy) and os.path.abspath(old_noc_copy) != os.path.abspath(final_pdf_path):
-                            try:
-                                os.remove(old_noc_copy)
-                            except Exception:
-                                pass
-
-                        with open(final_pdf_path, "wb") as f:
-                            f.write(uploaded_file.getbuffer())
+                        # Upload to Supabase Storage
+                        final_pdf_path = upload_file_to_supabase(uploaded_file, filename)
                         st.session_state["f_pdf"] = final_pdf_path
 
-                    # Update the specific target record
                     cursor.execute(
                         "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, mha_noc_copy = %s, modified_by = %s WHERE record_id = %s",
                         (clean_noc_num, noc_date, clean_org, str(validity), single_gsps, clean_region, final_pdf_path, st.session_state.name, target_id)
                     )
                     
-                    # Propagate document path and shared attributes across ALL entries sharing this MHA NOC Number, Date, and Organisation combination
                     if final_pdf_path:
                         cursor.execute(
                             "UPDATE n_records SET mha_noc_copy = %s, validity = %s, allowed_region = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
@@ -611,7 +589,7 @@ def render_entry_tab():
                 continue
         
         expired_flag = "⚠️ Expired" if is_expired(dt, val) else "Active"
-        pdf_display = "📄 Attached" if (noc_copy and os.path.exists(noc_copy)) else "No File"
+        pdf_display = "📄 Attached" if noc_copy else "No File"
         filtered_data.append({
             "Select": False,
             "Record ID": r_id,
@@ -695,16 +673,8 @@ def render_reports_tab():
                 unsafe_allow_html=True
             )
             
-            if noc_copy and os.path.exists(noc_copy):
-                with open(noc_copy, "rb") as fp:
-                    file_bytes = fp.read()
-                st.download_button(
-                    "📥 Download Attached File",
-                    data=file_bytes,
-                    file_name=os.path.basename(noc_copy),
-                    mime="application/octet-stream",
-                    key=f"dl_file_{i}_{noc}_{dt}"
-                )
+            if noc_copy:
+                st.markdown(f"[📥 Download Attached NOC File]({noc_copy})")
             else:
                 st.caption("*(No file attached for this NOC)*")
 
