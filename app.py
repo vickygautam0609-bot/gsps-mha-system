@@ -180,6 +180,9 @@ for key, default_val in [
     ("f_pdf", ""), ("fetch_id_input", ""), 
     ("last_fetched_id", ""), 
     ("upload_reset_counter", 0), ("trigger_reset", False),
+    ("load_noc", ""), ("load_date", ""), ("load_org", ""),
+    ("load_val_y", 0), ("load_val_m", 0), ("load_val_d", 0),
+    ("load_gsps", ""), ("load_reg", ""), ("load_pdf", ""),
     ("new_user_name", ""), ("new_user_uname", ""), ("new_user_pwd", ""),
     ("new_user_role", "Basic User"), ("new_p_entry", True), 
     ("new_p_reports", True), ("new_p_trash", True), ("new_p_users", False),
@@ -271,7 +274,6 @@ def validate_gsps(gsps_val):
     return True
 
 def parse_validity(val_str):
-    """Parses validity string formatted as 'Y years, M months, D days' into integer tuple (y, m, d)."""
     if not val_str:
         return 0, 0, 0
     y, m, d = 0, 0, 0
@@ -291,7 +293,6 @@ def parse_validity(val_str):
     return y, m, d
 
 def format_validity(y, m, d):
-    """Formats years, months, days into a clean readable string."""
     chunks = []
     if y > 0:
         chunks.append(f"{y} year{'s' if y > 1 else ''}")
@@ -330,7 +331,6 @@ def get_existing_noc_copy(noc_num, noc_date, org_name):
     return res[0] if res else ""
 
 def upload_file_to_supabase(file_obj, filename):
-    """Uploads file buffer to Supabase Storage bucket and returns public URL."""
     try:
         file_bytes = file_obj.getvalue()
         supabase_client.storage.from_(BUCKET_NAME).upload(
@@ -369,7 +369,6 @@ def reset_form_state():
     st.session_state["trigger_reset"] = True
 
 def on_fetch_id_change():
-    """Callback triggered when user enters a Record ID next to the Update button."""
     fetch_val = st.session_state.get("fetch_id_input", "").strip()
     if not fetch_val:
         st.session_state["last_fetched_id"] = ""
@@ -386,18 +385,19 @@ def on_fetch_id_change():
         elif fetched_data[7] == 'DELETED':
             st.toast(f"⚠️ Record ID #{target_id} is already deleted.", icon="⚠️")
         else:
-            st.session_state["f_noc"] = fetched_data[0]
-            st.session_state["f_date"] = fetched_data[1]
-            st.session_state["f_org"] = fetched_data[2]
+            # Store into temporary load variables instead of direct widget keys
+            st.session_state["load_noc"] = fetched_data[0]
+            st.session_state["load_date"] = fetched_data[1]
+            st.session_state["load_org"] = fetched_data[2]
             
             val_y, val_m, val_d = parse_validity(fetched_data[3])
-            st.session_state["f_val_y"] = val_y
-            st.session_state["f_val_m"] = val_m
-            st.session_state["f_val_d"] = val_d
+            st.session_state["load_val_y"] = val_y
+            st.session_state["load_val_m"] = val_m
+            st.session_state["load_val_d"] = val_d
 
-            st.session_state["f_gsps"] = fetched_data[4]
-            st.session_state["f_reg"] = fetched_data[5]
-            st.session_state["f_pdf"] = fetched_data[6] if fetched_data[6] else ""
+            st.session_state["load_gsps"] = fetched_data[4]
+            st.session_state["load_reg"] = fetched_data[5]
+            st.session_state["load_pdf"] = fetched_data[6] if fetched_data[6] else ""
             st.session_state["last_fetched_id"] = fetch_val
             st.toast(f"Record ID #{target_id} loaded! Modify fields above and click 'Update Record'.", icon="✅")
     else:
@@ -408,25 +408,37 @@ def on_fetch_id_change():
 # TAB BUILDER FUNCTIONS
 # ==========================================
 def render_entry_tab():
-    # Execute safe reset BEFORE any widgets are instantiated
     if st.session_state.get("trigger_reset", False):
-        st.session_state["f_noc"] = ""
-        st.session_state["f_date"] = ""
-        st.session_state["f_org"] = ""
-        st.session_state["f_val_y"] = 0
-        st.session_state["f_val_m"] = 0
-        st.session_state["f_val_d"] = 0
-        st.session_state["f_gsps"] = ""
-        st.session_state["f_reg"] = ""
-        st.session_state["f_pdf"] = ""
+        st.session_state["load_noc"] = ""
+        st.session_state["load_date"] = ""
+        st.session_state["load_org"] = ""
+        st.session_state["load_val_y"] = 0
+        st.session_state["load_val_m"] = 0
+        st.session_state["load_val_d"] = 0
+        st.session_state["load_gsps"] = ""
+        st.session_state["load_reg"] = ""
+        st.session_state["load_pdf"] = ""
         st.session_state["fetch_id_input"] = ""
         st.session_state["last_fetched_id"] = ""
         st.session_state["upload_reset_counter"] += 1
         st.session_state["trigger_reset"] = False
 
+    # Apply pre-loaded values to form state keys before widgets render
+    if st.session_state.get("load_noc") != "":
+        st.session_state["f_noc"] = st.session_state["load_noc"]
+        st.session_state["f_date"] = st.session_state["load_date"]
+        st.session_state["f_org"] = st.session_state["load_org"]
+        st.session_state["f_val_y"] = st.session_state["load_val_y"]
+        st.session_state["f_val_m"] = st.session_state["load_val_m"]
+        st.session_state["f_val_d"] = st.session_state["load_val_d"]
+        st.session_state["f_gsps"] = st.session_state["load_gsps"]
+        st.session_state["f_reg"] = st.session_state["load_reg"]
+        st.session_state["f_pdf"] = st.session_state["load_pdf"]
+        # Clear temporary load buffer
+        st.session_state["load_noc"] = ""
+
     st.subheader("Record Entry & Management")
 
-    # --- COMPACT STRUCTURED FORM CONTAINER ---
     with st.container():
         st.markdown("**MHA NOC Information**")
         col1, col2 = st.columns(2)
@@ -448,7 +460,6 @@ def render_entry_tab():
         st.markdown("**GSPS Numbers and Permitted Restricted Areas**")
         gsps_num = st.text_area("GSPS Number(s) (Comma/Newline sep)*", key="f_gsps", height=65, placeholder="Enter 10-digit GSPS numbers...")
 
-        # Parallel Row for Allowed Region and MHA NOC Upload Button
         r_col1, r_col2 = st.columns([1, 1])
         with r_col1:
             region = st.text_input("Allowed Region*", key="f_reg", placeholder="Pan India / North")
@@ -471,7 +482,6 @@ def render_entry_tab():
             else:
                 st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
 
-        # Automatically check and fetch shared document path for this MHA NOC Number + Date + Organisation combination
         shared_noc_copy = ""
         if noc_num.strip() and noc_date.strip() and org.strip():
             shared_noc_copy = get_existing_noc_copy(noc_num.strip(), noc_date.strip(), org.strip())
@@ -483,7 +493,6 @@ def render_entry_tab():
             st.markdown(f"[🔗 Open / Download Linked Document]({active_file_path})")
 
         st.markdown("")
-        # Action Bar: Save | Fetch Record ID (paired right next to Update) | Update | Clear
         b1, b_fetch, b2, b3 = st.columns([1.2, 1.1, 1.2, 1])
         with b1:
             st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
@@ -612,13 +621,11 @@ def render_entry_tab():
                         final_pdf_path = upload_file_to_supabase(uploaded_file, filename)
                         st.session_state["f_pdf"] = final_pdf_path
 
-                    # 1. Update ONLY this specific target record ID with its specific fields (GSPS number, validity, etc.)
                     cursor.execute(
                         "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, mha_noc_copy = %s, modified_by = %s WHERE record_id = %s",
                         (clean_noc_num, noc_date, clean_org, validity_str, single_gsps, clean_region, final_pdf_path, st.session_state.name, target_id)
                     )
                     
-                    # 2. Propagate BOTH the file attachment AND the validity period across all rows sharing the exact same NOC, Date, and Org combination
                     if final_pdf_path:
                         cursor.execute(
                             "UPDATE n_records SET mha_noc_copy = %s, validity = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
