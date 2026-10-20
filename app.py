@@ -19,7 +19,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- STRICT BUTTON-ONLY CLICK, CUSTOM UPLOAD TEXT & SIZE TAG CSS ---
+# --- STRICT BUTTON-ONLY CLICK, CUSTOM UPLOAD TEXT & HEADER CSS ---
 st.markdown(
     """
     <style>
@@ -68,6 +68,11 @@ st.markdown(
     }
     div.stButton > button:hover {
         background-color: #163d6b !important;
+        color: white !important;
+    }
+    /* Color data table / editor headers */
+    [data-testid="stDataEditor"] [role="columnheader"] {
+        background-color: #1f538d !important;
         color: white !important;
     }
     </style>
@@ -554,13 +559,13 @@ def render_entry_tab():
                         final_pdf_path = upload_file_to_supabase(uploaded_file, filename)
                         st.session_state["f_pdf"] = final_pdf_path
 
-                    # 1. Update ONLY this specific target record ID with its specific fields (GSPS number, etc.)
+                    # 1. Update ONLY this specific target record ID with its fields (GSPS number, etc.)
                     cursor.execute(
                         "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, mha_noc_copy = %s, modified_by = %s WHERE record_id = %s",
                         (clean_noc_num, noc_date, clean_org, str(validity), single_gsps, clean_region, final_pdf_path, st.session_state.name, target_id)
                     )
                     
-                    # 2. Propagate ONLY the file attachment (and matching shared attributes) across all rows sharing the same NOC, Date, and Org combination
+                    # 2. Propagate ONLY the file attachment across all rows sharing the exact same NOC, Date, and Org combination
                     if final_pdf_path:
                         cursor.execute(
                             "UPDATE n_records SET mha_noc_copy = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
@@ -613,7 +618,17 @@ def render_entry_tab():
 
     if filtered_data:
         df_active = pd.DataFrame(filtered_data)
-        edited_df = st.data_editor(df_active, hide_index=True, use_container_width=True)
+        
+        # Disable editing on all columns except "Select" so users cannot change fields by clicking cells
+        disabled_cols = [col for col in df_active.columns if col != "Select"]
+        
+        edited_df = st.data_editor(
+            df_active, 
+            hide_index=True, 
+            use_container_width=True, 
+            disabled=disabled_cols,
+            key="active_records_editor"
+        )
         
         selected_to_delete = edited_df[edited_df["Select"] == True]["Record ID"].tolist()
         if selected_to_delete:
