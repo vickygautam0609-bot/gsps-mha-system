@@ -296,17 +296,14 @@ def upload_file_to_supabase(file_obj, filename):
     """Uploads file buffer to Supabase Storage bucket and returns public URL."""
     try:
         file_bytes = file_obj.getvalue()
-        # Upload file to Supabase bucket
         supabase_client.storage.from_(BUCKET_NAME).upload(
             path=filename,
             file=file_bytes,
             file_options={"content-type": file_obj.type, "upsert": "true"}
         )
-        # Get public URL
         public_url = supabase_client.storage.from_(BUCKET_NAME).get_public_url(filename)
         return public_url
     except Exception as e:
-        # If file already exists or update happens, try updating it
         try:
             supabase_client.storage.from_(BUCKET_NAME).update(
                 path=filename,
@@ -317,6 +314,19 @@ def upload_file_to_supabase(file_obj, filename):
         except Exception as err:
             st.error(f"Storage Upload Error: {err}")
             return ""
+
+def delete_file_from_supabase(file_url):
+    """Deletes a file from Supabase storage using its public URL."""
+    if not file_url:
+        return
+    try:
+        # Extract filename from public URL
+        parts = file_url.split(f"/{BUCKET_NAME}/")
+        if len(parts) > 1:
+            filename = parts[1].split("?")[0] # remove query params if any
+            supabase_client.storage.from_(BUCKET_NAME).remove([filename])
+    except Exception as e:
+        print(f"Warning: Could not delete old file from storage: {e}")
 
 def is_expired(noc_date_str, validity_val):
     if not validity_val or not str(validity_val).isdigit():
@@ -332,6 +342,7 @@ def reset_form_state():
     st.session_state["trigger_reset"] = True
 
 def on_fetch_id_change():
+    """Callback triggered when user enters a Record ID next to the Update button."""
     fetch_val = st.session_state.get("fetch_id_input", "").strip()
     if not fetch_val:
         st.session_state["last_fetched_id"] = ""
@@ -487,7 +498,6 @@ def render_entry_tab():
                             ext = os.path.splitext(uploaded_file.name)[1].lower()
                             filename = f"NOC_{safe_noc}_{safe_date}_{safe_org}{ext}"
                             
-                            # Upload to Supabase Storage
                             final_pdf_path = upload_file_to_supabase(uploaded_file, filename)
                             st.session_state["f_pdf"] = final_pdf_path
 
@@ -537,31 +547,39 @@ def render_entry_tab():
                 if check_duplicate(clean_noc_num, noc_date, single_gsps, clean_region, exclude_id=target_id):
                     st.error("Another active record with these details (NOC, Date, GSPS, Region) already exists!")
                 else:
+                    # Fetch old attachment copy for this specific combination before updating
                     old_noc_copy = get_existing_noc_copy(clean_noc_num, noc_date, clean_org)
                     final_pdf_path = shared_noc_copy
+                    
                     if uploaded_file is not None and not file_error:
+                        # Delete old file from Supabase storage if it exists
+                        if old_noc_copy:
+                            delete_file_from_supabase(old_noc_copy)
+
                         safe_noc = clean_noc_num.replace("/", "_").replace("\\", "_")
                         safe_date = noc_date.replace(".", "_")
                         safe_org = clean_org.replace("/", "_").replace("\\", "_").replace(" ", "_")
                         ext = os.path.splitext(uploaded_file.name)[1].lower()
                         filename = f"NOC_{safe_noc}_{safe_date}_{safe_org}{ext}"
                         
-                        # Upload to Supabase Storage
+                        # Upload new file to Supabase Storage
                         final_pdf_path = upload_file_to_supabase(uploaded_file, filename)
                         st.session_state["f_pdf"] = final_pdf_path
 
+                    # 1. Update ONLY the explicitly fetched row's values (e.g., allowed region, GSPS number, validity, etc.)
                     cursor.execute(
-                        "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, mha_noc_copy = %s, modified_by = %s WHERE record_id = %s",
-                        (clean_noc_num, noc_date, clean_org, str(validity), single_gsps, clean_region, final_pdf_path, st.session_state.name, target_id)
+                        "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, modified_by = %s WHERE record_id = %s",
+                        (clean_noc_num, noc_date, clean_org, str(validity), single_gsps, clean_region, st.session_state.name, target_id)
                     )
                     
-                    if final_pdf_path:
+                    # 2. If a new attachment file was uploaded, update/propagate ONLY the attachment across all active rows having the same NOC Number + Date + Organisation combination
+                    if uploaded_file is not None and not file_error and final_pdf_path:
                         cursor.execute(
-                            "UPDATE n_records SET mha_noc_copy = %s, validity = %s, allowed_region = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
-                            (final_pdf_path, str(validity), clean_region, clean_noc_num, noc_date, clean_org)
+                            "UPDATE n_records SET mha_noc_copy = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
+                            (final_pdf_path, clean_noc_num, noc_date, clean_org)
                         )
                     
-                    st.toast(f"Record ID #{target_id} and all linked NOC entries updated successfully!", icon="✅")
+                    st.toast(f"Record ID #{target_id} updated successfully!", icon="✅")
                     reset_form_state()
                     st.rerun()
 
@@ -640,359 +658,4 @@ def render_reports_tab():
         if rep_start and validate_date(rep_start):
             if datetime.strptime(dt, "%d.%m.%Y") < datetime.strptime(rep_start, "%d.%m.%Y"): continue
         if rep_end and validate_date(rep_end):
-            if datetime.strptime(dt, "%d.%m.%Y") > datetime.strptime(rep_end, "%d.%m.%Y"): continue
-        filtered_report_rows.append(r)
-
-    if filtered_report_rows:
-        grouped_data = {}
-        for r in filtered_report_rows:
-            noc, dt, org, val, gsps, reg, noc_copy = r
-            key = (noc, dt, org, val, noc_copy)
-            if key not in grouped_data:
-                grouped_data[key] = []
-            grouped_data[key].append((gsps, reg))
-
-        st.caption(f"ℹ️ *Total Unique MHA NOCs: {len(grouped_data)} | Total GSPS Entries: {len(filtered_report_rows)}*")
-        st.markdown("---")
-
-        s_no_counter = 1
-        display_grouped_rows = []
-
-        for i, (noc_key, items) in enumerate(grouped_data.items()):
-            noc, dt, org, val, noc_copy = noc_key
-            
-            st.markdown(
-                f"""
-                <div style="background-color: #eaf2f8; padding: 10px 15px; border-left: 5px solid #1f538d; border-radius: 4px; margin-bottom: 5px;">
-                    <strong>MHA NOC Number:</strong> <span style="color: #1f538d;">{noc}</span> &nbsp;&nbsp;|&nbsp;&nbsp; 
-                    <strong>Date:</strong> {dt} &nbsp;&nbsp;|&nbsp;&nbsp; 
-                    <strong>Organisation:</strong> {org} &nbsp;&nbsp;|&nbsp;&nbsp; 
-                    <strong>Validity:</strong> {val if val else 'N/A'} Yrs
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-            
-            if noc_copy:
-                st.markdown(f"[📥 Download Attached NOC File]({noc_copy})")
-            else:
-                st.caption("*(No file attached for this NOC)*")
-
-            sub_table_data = []
-            for item_idx, (gsps, reg) in enumerate(items, start=1):
-                sub_table_data.append({
-                    "S.No.": s_no_counter,
-                    "GSPS Number": gsps,
-                    "Allowed Region": reg
-                })
-                display_grouped_rows.append({
-                    "S.No.": s_no_counter,
-                    "MHA NOC Number": noc,
-                    "NOC Date": dt,
-                    "Organisation": org,
-                    "Validity (Yrs)": val if val else "N/A",
-                    "GSPS Number": gsps,
-                    "Allowed Region": reg
-                })
-                s_no_counter += 1
-
-            df_sub = pd.DataFrame(sub_table_data)
-            st.dataframe(df_sub, hide_index=True, use_container_width=True)
-            st.write("")
-
-        st.markdown("---")
-
-        df_export = pd.DataFrame(display_grouped_rows)
-
-        ex_col1, ex_col2 = st.columns(2)
-        with ex_col1:
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_export.to_excel(writer, index=False, sheet_name='Grouped Report')
-            st.download_button("📊 Download Excel Report", data=output.getvalue(), file_name="GSPS_MHA_Grouped_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        
-        with ex_col2:
-            pdf_buffer = io.BytesIO()
-            doc = SimpleDocTemplate(pdf_buffer, pagesize=landscape(letter), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
-            elements = []
-            styles = getSampleStyleSheet()
-            title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#1f538d'), alignment=1)
-            
-            elements.append(Paragraph("GSPS MHA Records Grouped Summary Report", title_style))
-            elements.append(Paragraph(f"Generated on: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')} | Total Unique NOCs: {len(grouped_data)}", styles['Normal']))
-            elements.append(Spacer(1, 10))
-            
-            headers = ["S.No.", "MHA NOC Number", "NOC Date", "Organisation", "Validity", "GSPS Number", "Allowed Region"]
-            table_data = [[Paragraph(h, ParagraphStyle('H', parent=styles['Normal'], fontName='Helvetica-Bold', textColor=colors.whitesmoke, alignment=1)) for h in headers]]
-            
-            for row in display_grouped_rows:
-                table_data.append([
-                    Paragraph(str(row["S.No."]), ParagraphStyle('C', parent=styles['Normal'], fontSize=9, alignment=1)),
-                    Paragraph(str(row["MHA NOC Number"]), ParagraphStyle('C', parent=styles['Normal'], fontSize=9, alignment=1)),
-                    Paragraph(str(row["NOC Date"]), ParagraphStyle('C', parent=styles['Normal'], fontSize=9, alignment=1)),
-                    Paragraph(str(row["Organisation"]), ParagraphStyle('C', parent=styles['Normal'], fontSize=9, alignment=1)),
-                    Paragraph(str(row["Validity (Yrs)"]), ParagraphStyle('C', parent=styles['Normal'], fontSize=9, alignment=1)),
-                    Paragraph(str(row["GSPS Number"]), ParagraphStyle('C', parent=styles['Normal'], fontSize=9, alignment=1)),
-                    Paragraph(str(row["Allowed Region"]), ParagraphStyle('C', parent=styles['Normal'], fontSize=9, alignment=1)),
-                ])
-            
-            t = Table(table_data, colWidths=[45, 120, 95, 160, 60, 110, 150])
-            t.setStyle(TableStyle([
-                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f538d')),
-                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#aed6f1')),
-                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ]))
-            elements.append(t)
-            doc.build(elements)
-            
-            st.download_button("📄 Download PDF Report", data=pdf_buffer.getvalue(), file_name="GSPS_MHA_Grouped_Report.pdf", mime="application/pdf")
-    else:
-        st.info("No records match current report filters.")
-
-
-def render_trash_tab():
-    st.subheader("Deleted Records Archive")
-    cursor.execute("SELECT record_id, mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, created_by, modified_by FROM n_records WHERE status = 'DELETED'")
-    del_rows = cursor.fetchall()
-    
-    if del_rows:
-        del_data = []
-        for r in del_rows:
-            del_data.append({
-                "Restore": False,
-                "Record ID": r[0],
-                "NOC Number": r[1],
-                "NOC Date": r[2],
-                "Organisation": r[3],
-                "Validity (Yrs)": r[4],
-                "GSPS Number": r[5],
-                "Allowed Region": r[6],
-                "Created By": r[7],
-                "Modified By": r[8]
-            })
-        df_del = pd.DataFrame(del_data)
-        edited_del = st.data_editor(df_del, hide_index=True, use_container_width=True)
-        
-        to_restore = edited_del[edited_del["Restore"] == True]["Record ID"].tolist()
-        if to_restore:
-            if st.button("♻️ Restore Selected Records", key="restore_btn_trash"):
-                for r_id in to_restore:
-                    cursor.execute("UPDATE n_records SET status = 'ACTIVE', modified_by = %s WHERE record_id = %s", (st.session_state.name, r_id))
-                st.toast(f"Successfully restored {len(to_restore)} record(s)!", icon="♻️")
-                st.rerun()
-    else:
-        st.info("Trash archive is empty.")
-
-
-def render_users_tab():
-    st.subheader("User Management & Access Privileges")
-
-    user_counter = st.session_state.get("new_user_counter", 0)
-
-    # --- PASSWORD UPDATE SECTION ---
-    with st.expander("🔑 Update User Passwords", expanded=False):
-        with st.form("update_password_form"):
-            cursor.execute("SELECT username, name, role FROM users")
-            all_users = cursor.fetchall()
-            user_dict = {f"{u[1]} ({u[0]}) - {u[2]}": u[0] for u in all_users}
-            
-            if st.session_state.role == "Administrator":
-                selected_display = st.selectbox("Select User", options=list(user_dict.keys()))
-                target_uname = user_dict[selected_display]
-            else:
-                target_uname = st.session_state.username
-                st.info(f"Updating password for your account: **{st.session_state.name} ({target_uname})**")
-            
-            new_pwd = st.text_input("New Password", type="password")
-            confirm_pwd = st.text_input("Confirm New Password", type="password")
-            
-            update_pwd_btn = st.form_submit_button("🔒 Update Password", use_container_width=True)
-            if update_pwd_btn:
-                if not new_pwd or not confirm_pwd:
-                    st.error("Please fill out both password fields.")
-                elif new_pwd != confirm_pwd:
-                    st.error("Passwords do not match!")
-                else:
-                    cursor.execute("UPDATE users SET password = %s WHERE username = %s", (new_pwd.strip(), target_uname))
-                    st.toast(f"Password for username '{target_uname}' updated successfully!", icon="🔒")
-
-    st.markdown("---")
-    with st.form(f"new_user_form_{user_counter}"):
-        st.write("### Create New User")
-        uc1, uc2, uc3, uc4 = st.columns(4)
-        with uc1: new_name = st.text_input("Full Name")
-        with uc2: new_uname = st.text_input("Username (Saved in UPPERCASE)")
-        with uc3: new_pwd = st.text_input("Password", type="password")
-        with uc4: new_role = st.selectbox("Role", ["Administrator", "Basic User"])
-        
-        st.write("📌 **Select Tab Access Privileges:**")
-        pc1, pc2, pc3, pc4 = st.columns(4)
-        with pc1: p_entry = st.checkbox("📝 Record Entry", value=True)
-        with pc2: p_reports = st.checkbox("📊 Reports", value=True)
-        with pc3: p_trash = st.checkbox("🗑️ Deleted Records", value=True)
-        with pc4: p_users = st.checkbox("👤 User Management", value=False)
-        
-        create_user_btn = st.form_submit_button("➕ Create User", use_container_width=True)
-        if create_user_btn:
-            clean_uname = new_uname.strip().upper()
-            if not new_name.strip() or not clean_uname or not new_pwd.strip():
-                st.error("All user fields are required!")
-            else:
-                cursor.execute("SELECT COUNT(*) FROM users WHERE username = %s", (clean_uname,))
-                if cursor.fetchone()[0] > 0:
-                    st.error(f"⚠️ Username '{clean_uname}' already exists. Please choose a different username.")
-                else:
-                    try:
-                        if new_role == "Administrator":
-                            p_users = True
-
-                        cursor.execute(
-                            "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users, status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'ACTIVE')",
-                            (new_name.strip(), clean_uname, new_pwd.strip(), new_role, int(p_entry), int(p_reports), int(p_trash), int(p_users))
-                        )
-                        st.toast(f"User '{clean_uname}' created successfully!", icon="✅")
-                        st.session_state["new_user_counter"] += 1
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error creating user: {e}")
-
-    st.markdown("---")
-    st.write("### Existing Users & Status Overview")
-    cursor.execute("SELECT user_id, name, username, role, p_entry, p_reports, p_trash, p_users, status FROM users")
-    users_rows = cursor.fetchall()
-    
-    if users_rows:
-        users_data = []
-        for ur in users_rows:
-            is_admin = (ur[3] == "Administrator" or ur[2] == "ADMIN")
-            users_data.append({
-                "Select": False,
-                "User ID": ur[0],
-                "Name": ur[1],
-                "Username": ur[2],
-                "Role": ur[3],
-                "Entry": bool(ur[4]),
-                "Reports": bool(ur[5]),
-                "Trash": bool(ur[6]),
-                "Users": True if is_admin else bool(ur[7]),
-                "Status": ur[8]
-            })
-        df_users = pd.DataFrame(users_data)
-        
-        edited_users = st.data_editor(
-            df_users,
-            hide_index=True,
-            use_container_width=True,
-            disabled=["User ID", "Name", "Username", "Role", "Status"],
-            key="users_editor"
-        )
-        
-        col_s1, col_s2, col_s3 = st.columns(3)
-        with col_s1:
-            save_privs_btn = st.button("💾 Save Privilege Changes", key="save_privs_btn")
-        with col_s2:
-            activate_btn = st.button("🔓 Activate Selected", key="activate_users_btn")
-        with col_s3:
-            deactivate_btn = st.button("🔒 Deactivate Selected", type="primary", key="deactivate_users_btn")
-
-        if save_privs_btn:
-            validation_error = False
-            for idx, row in edited_users.iterrows():
-                role = row["Role"]
-                uname = row["Username"]
-                is_admin = (role == "Administrator" or uname == "ADMIN")
-                
-                if is_admin and not row["Users"]:
-                    validation_error = True
-                    break
-            
-            if validation_error:
-                st.error("⚠️ Users cannot be left unchecked for Administrator role account.")
-            else:
-                for idx, row in edited_users.iterrows():
-                    u_id = row["User ID"]
-                    uname = row["Username"]
-                    role = row["Role"]
-                    
-                    if uname == 'ADMIN' or role == 'Administrator':
-                        e = 1 if row["Entry"] else 0
-                        r = 1 if row["Reports"] else 0
-                        t = 1 if row["Trash"] else 0
-                        us = 1
-                    else:
-                        e = 1 if row["Entry"] else 0
-                        r = 1 if row["Reports"] else 0
-                        t = 1 if row["Trash"] else 0
-                        us = 1 if row["Users"] else 0
-
-                    cursor.execute(
-                        "UPDATE users SET p_entry = %s, p_reports = %s, p_trash = %s, p_users = %s WHERE user_id = %s",
-                        (e, r, t, us, u_id)
-                    )
-                
-                cursor.execute("SELECT p_entry, p_reports, p_trash, p_users FROM users WHERE username = %s", (st.session_state.username,))
-                p_row = cursor.fetchone()
-                if p_row:
-                    st.session_state.p_entry = p_row[0]
-                    st.session_state.p_reports = p_row[1]
-                    st.session_state.p_trash = p_row[2]
-                    st.session_state.p_users = 1 if st.session_state.role == 'Administrator' else p_row[3]
-
-                st.toast("User privileges updated successfully!", icon="✅")
-                st.rerun()
-
-        selected_users = edited_users[edited_users["Select"] == True]
-        users_to_mod = selected_users["Username"].tolist()
-
-        if activate_btn:
-            if not users_to_mod:
-                st.warning("Please select at least one user to activate.")
-            else:
-                for u in users_to_mod:
-                    cursor.execute("UPDATE users SET status = 'ACTIVE' WHERE username = %s", (u,))
-                st.toast("Selected user(s) activated successfully!", icon="✅")
-                st.rerun()
-
-        if deactivate_btn:
-            if not users_to_mod:
-                st.warning("Please select at least one user to deactivate.")
-            else:
-                admin_included = any(u in ["ADMIN"] or edited_users.loc[edited_users["Username"] == u, "Role"].values[0] == "Administrator" for u in users_to_mod)
-                if admin_included:
-                    st.error("⚠️ Administrator accounts cannot be deactivated!")
-                else:
-                    for u in users_to_mod:
-                        if u == st.session_state.username:
-                            st.error("You cannot deactivate your own active account.")
-                        else:
-                            cursor.execute("UPDATE users SET status = 'INACTIVE' WHERE username = %s", (u,))
-                    st.toast("Selected user(s) deactivated.", icon="🔒")
-                    st.rerun()
-
-
-# ==========================================
-# DYNAMIC TAB CREATION BASED ON PERMISSIONS
-# ==========================================
-tab_labels = []
-tab_funcs = []
-
-if st.session_state.p_entry == 1:
-    tab_labels.append("📝 Data Entry & Management")
-    tab_funcs.append(render_entry_tab)
-if st.session_state.p_reports == 1:
-    tab_labels.append("📊 Reports & Analytics")
-    tab_funcs.append(render_reports_tab)
-if st.session_state.p_trash == 1:
-    tab_labels.append("🗑️ Deleted Records")
-    tab_funcs.append(render_trash_tab)
-if st.session_state.p_users == 1 or st.session_state.role == "Administrator":
-    tab_labels.append("👤 User Management")
-    tab_funcs.append(render_users_tab)
-
-if tab_labels:
-    active_tabs = st.tabs(tab_labels)
-    for idx, func in enumerate(tab_funcs):
-        with active_tabs[idx]:
-            func()
-else:
-    st.error("Your app has no tab access privileges enabled. Please contact your system administrator.")
+            if datetime
