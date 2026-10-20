@@ -286,7 +286,6 @@ def parse_validity(val_str):
             elif "day" in p.lower():
                 d = int(p.split()[0])
     except Exception:
-        # Fallback if it was saved as a legacy pure number string
         if str(val_str).isdigit():
             y = int(val_str)
     return y, m, d
@@ -391,7 +390,6 @@ def on_fetch_id_change():
             st.session_state["f_date"] = fetched_data[1]
             st.session_state["f_org"] = fetched_data[2]
             
-            # Parse validity string into Y, M, D components
             val_y, val_m, val_d = parse_validity(fetched_data[3])
             st.session_state["f_val_y"] = val_y
             st.session_state["f_val_m"] = val_m
@@ -410,7 +408,6 @@ def on_fetch_id_change():
 # TAB BUILDER FUNCTIONS
 # ==========================================
 def render_entry_tab():
-    # Execute safe reset BEFORE any widgets are instantiated
     if st.session_state.get("trigger_reset", False):
         st.session_state["f_noc"] = ""
         st.session_state["f_date"] = ""
@@ -428,7 +425,6 @@ def render_entry_tab():
 
     st.subheader("Record Entry & Management")
 
-    # --- COMPACT STRUCTURED FORM CONTAINER ---
     with st.container():
         st.markdown("**MHA NOC Information**")
         col1, col2 = st.columns(2)
@@ -438,20 +434,18 @@ def render_entry_tab():
         with col2:
             noc_date = st.text_input("NOC Date (DD.MM.YYYY)*", key="f_date", placeholder="DD.MM.YYYY")
             
-            # Validity breakdown layout (Years, Months, Days)
             st.markdown("Validity Period*")
             v_col1, v_col2, v_col3 = st.columns(3)
             with v_col1:
                 val_years = st.number_input("Years", min_value=0, step=1, format="%d", key="f_val_y")
             with v_col2:
-                val_months = st.number_input("Months", min_value=0, max_level=11, step=1, format="%d", key="f_val_m")
+                val_months = st.number_input("Months", min_value=0, max_value=11, step=1, format="%d", key="f_val_m")
             with v_col3:
-                val_days = st.number_input("Days", min_value=0, max_level=31, step=1, format="%d", key="f_val_d")
+                val_days = st.number_input("Days", min_value=0, max_value=31, step=1, format="%d", key="f_val_d")
 
         st.markdown("**GSPS Numbers and Permitted Restricted Areas**")
         gsps_num = st.text_area("GSPS Number(s) (Comma/Newline sep)*", key="f_gsps", height=65, placeholder="Enter 10-digit GSPS numbers...")
 
-        # Parallel Row for Allowed Region and MHA NOC Upload Button
         r_col1, r_col2 = st.columns([1, 1])
         with r_col1:
             region = st.text_input("Allowed Region*", key="f_reg", placeholder="Pan India / North")
@@ -474,7 +468,6 @@ def render_entry_tab():
             else:
                 st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
 
-        # Automatically check and fetch shared document path for this MHA NOC Number + Date + Organisation combination
         shared_noc_copy = ""
         if noc_num.strip() and noc_date.strip() and org.strip():
             shared_noc_copy = get_existing_noc_copy(noc_num.strip(), noc_date.strip(), org.strip())
@@ -486,7 +479,6 @@ def render_entry_tab():
             st.markdown(f"[🔗 Open / Download Linked Document]({active_file_path})")
 
         st.markdown("")
-        # Action Bar: Save | Fetch Record ID (paired right next to Update) | Update | Clear
         b1, b_fetch, b2, b3 = st.columns([1.2, 1.1, 1.2, 1])
         with b1:
             st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
@@ -615,7 +607,6 @@ def render_entry_tab():
                         final_pdf_path = upload_file_to_supabase(uploaded_file, filename)
                         st.session_state["f_pdf"] = final_pdf_path
 
-                    # Update target record ID with its specific fields & validity string
                     cursor.execute(
                         "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, mha_noc_copy = %s, modified_by = %s WHERE record_id = %s",
                         (clean_noc_num, noc_date, clean_org, validity_str, single_gsps, clean_region, final_pdf_path, st.session_state.name, target_id)
