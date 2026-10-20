@@ -329,6 +329,7 @@ def reset_form_state():
     st.session_state["trigger_reset"] = True
 
 def on_fetch_id_change():
+    """Callback triggered when user enters a Record ID next to the Update button."""
     fetch_val = st.session_state.get("fetch_id_input", "").strip()
     if not fetch_val:
         st.session_state["last_fetched_id"] = ""
@@ -362,6 +363,7 @@ def on_fetch_id_change():
 # TAB BUILDER FUNCTIONS
 # ==========================================
 def render_entry_tab():
+    # Execute safe reset BEFORE any widgets are instantiated
     if st.session_state.get("trigger_reset", False):
         st.session_state["f_noc"] = ""
         st.session_state["f_date"] = ""
@@ -377,6 +379,7 @@ def render_entry_tab():
 
     st.subheader("Record Entry & Management")
 
+    # --- COMPACT STRUCTURED FORM CONTAINER ---
     with st.container():
         st.markdown("**MHA NOC Information**")
         col1, col2 = st.columns(2)
@@ -390,6 +393,7 @@ def render_entry_tab():
         st.markdown("**GSPS Numbers and Permitted Restricted Areas**")
         gsps_num = st.text_area("GSPS Number(s) (Comma/Newline sep)*", key="f_gsps", height=65, placeholder="Enter 10-digit GSPS numbers...")
 
+        # Parallel Row for Allowed Region and MHA NOC Upload Button
         r_col1, r_col2 = st.columns([1, 1])
         with r_col1:
             region = st.text_input("Allowed Region*", key="f_reg", placeholder="Pan India / North")
@@ -412,6 +416,7 @@ def render_entry_tab():
             else:
                 st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
 
+        # Automatically check and fetch shared document path for this MHA NOC Number + Date + Organisation combination
         shared_noc_copy = ""
         if noc_num.strip() and noc_date.strip() and org.strip():
             shared_noc_copy = get_existing_noc_copy(noc_num.strip(), noc_date.strip(), org.strip())
@@ -423,6 +428,7 @@ def render_entry_tab():
             st.markdown(f"[🔗 Open / Download Linked Document]({active_file_path})")
 
         st.markdown("")
+        # Action Bar: Save | Fetch Record ID (paired right next to Update) | Update | Clear
         b1, b_fetch, b2, b3 = st.columns([1.2, 1.1, 1.2, 1])
         with b1:
             st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
@@ -447,6 +453,7 @@ def render_entry_tab():
             st.rerun()
 
         if save_btn:
+            # Force uppercase conversion for MHA NOC Number, Organisation, and Allowed Region
             clean_noc_num = noc_num.strip().upper()
             clean_org = org.strip().upper()
             clean_region = region.strip().upper()
@@ -504,10 +511,12 @@ def render_entry_tab():
                         st.rerun()
 
         if update_btn:
+            # Force uppercase conversion for MHA NOC Number, Organisation, and Allowed Region
             clean_noc_num = noc_num.strip().upper()
             clean_org = org.strip().upper()
             clean_region = region.strip().upper()
 
+            # Parse GSPS list allowing single entries even if trailing comma/newline exists
             parsed_gsps_list = [g.strip() for g in gsps_num.replace("\n", ",").split(",") if g.strip()]
 
             if not fetch_id.strip() or not fetch_id.strip().isdigit():
@@ -545,18 +554,20 @@ def render_entry_tab():
                         final_pdf_path = upload_file_to_supabase(uploaded_file, filename)
                         st.session_state["f_pdf"] = final_pdf_path
 
+                    # 1. Update ONLY this specific target record ID with its specific fields (GSPS number, etc.)
                     cursor.execute(
                         "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, mha_noc_copy = %s, modified_by = %s WHERE record_id = %s",
                         (clean_noc_num, noc_date, clean_org, str(validity), single_gsps, clean_region, final_pdf_path, st.session_state.name, target_id)
                     )
                     
+                    # 2. Propagate ONLY the file attachment (and matching shared attributes) across all rows sharing the same NOC, Date, and Org combination
                     if final_pdf_path:
                         cursor.execute(
-                            "UPDATE n_records SET mha_noc_copy = %s, validity = %s, allowed_region = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
-                            (final_pdf_path, str(validity), clean_region, clean_noc_num, noc_date, clean_org)
+                            "UPDATE n_records SET mha_noc_copy = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
+                            (final_pdf_path, clean_noc_num, noc_date, clean_org)
                         )
                     
-                    st.toast(f"Record ID #{target_id} and all linked NOC entries updated successfully!", icon="✅")
+                    st.toast(f"Record ID #{target_id} updated successfully and attachment synchronized!", icon="✅")
                     reset_form_state()
                     st.rerun()
 
