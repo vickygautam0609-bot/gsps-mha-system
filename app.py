@@ -644,11 +644,12 @@ def render_entry_tab():
 def render_reports_tab():
     st.subheader("Reports & Analytics (Grouped by MHA NOC)")
     
-    rc1, rc2, rc3, rc4 = st.columns(4)
+    rc1, rc2, rc3, rc4, rc5 = st.columns(5)
     with rc1: rep_start = st.text_input("Start Date (DD.MM.YYYY)", placeholder="Optional", key="r_start")
     with rc2: rep_end = st.text_input("End Date (DD.MM.YYYY)", placeholder="Optional", key="r_end")
     with rc3: rep_reg = st.text_input("Allowed Region Filter", placeholder="Optional", key="r_reg")
-    with rc4: rep_noc = st.text_input("NOC Number Filter", placeholder="Optional", key="r_noc")
+    with rc4: rep_noc = st.text_input("MHA NOC Filter", placeholder="Optional", key="r_noc")
+    with rc5: rep_org = st.text_input("Organisation Filter", placeholder="Optional", key="r_org")
 
     cursor.execute("SELECT mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, mha_noc_copy FROM n_records WHERE status = 'ACTIVE' ORDER BY mha_noc_number, mha_noc_date")
     report_rows = cursor.fetchall()
@@ -657,7 +658,8 @@ def render_reports_tab():
     for r in report_rows:
         noc, dt, org, val, gsps, reg, noc_copy = r
         if rep_reg and rep_reg.lower() not in reg.lower(): continue
-        if rep_noc and rep_noc.lower() not in noc.lower(): continue
+        if rep_noc and rep_noc.upper() not in noc.upper(): continue
+        if rep_org and rep_org.upper() not in org.upper(): continue
         if rep_start and validate_date(rep_start):
             if datetime.strptime(dt, "%d.%m.%Y") < datetime.strptime(rep_start, "%d.%m.%Y"): continue
         if rep_end and validate_date(rep_end):
