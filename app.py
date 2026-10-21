@@ -241,8 +241,12 @@ if not st.session_state.logged_in:
                         st.session_state["f_gsps"] = ""
                         st.session_state["f_reg"] = ""
                         st.session_state["f_pdf"] = ""
+                        st.session_state["load_noc"] = ""
+                        st.session_state["load_date"] = ""
+                        st.session_state["load_org"] = ""
                         st.session_state["fetch_id_input"] = ""
                         st.session_state["last_fetched_id"] = ""
+                        st.session_state["upload_reset_counter"] += 1
 
                         st.toast(f"Welcome back, {user[0]}!", icon="👋")
                         st.rerun()
@@ -380,7 +384,21 @@ def is_expired(noc_date_str, validity_str):
         return False
 
 def reset_form_state():
-    st.session_state["trigger_reset"] = True
+    st.session_state["f_noc"] = ""
+    st.session_state["f_date"] = ""
+    st.session_state["f_org"] = ""
+    st.session_state["f_val_y"] = 0
+    st.session_state["f_val_m"] = 0
+    st.session_state["f_val_d"] = 0
+    st.session_state["f_gsps"] = ""
+    st.session_state["f_reg"] = ""
+    st.session_state["f_pdf"] = ""
+    st.session_state["load_noc"] = ""
+    st.session_state["load_date"] = ""
+    st.session_state["load_org"] = ""
+    st.session_state["fetch_id_input"] = ""
+    st.session_state["last_fetched_id"] = ""
+    st.session_state["upload_reset_counter"] += 1
 
 def on_fetch_id_change():
     fetch_val = st.session_state.get("fetch_id_input", "").strip()
@@ -421,22 +439,7 @@ def on_fetch_id_change():
 # TAB BUILDER FUNCTIONS
 # ==========================================
 def render_entry_tab():
-    if st.session_state.get("trigger_reset", False):
-        st.session_state["load_noc"] = ""
-        st.session_state["load_date"] = ""
-        st.session_state["load_org"] = ""
-        st.session_state["load_val_y"] = 0
-        st.session_state["load_val_m"] = 0
-        st.session_state["load_val_d"] = 0
-        st.session_state["load_gsps"] = ""
-        st.session_state["load_reg"] = ""
-        st.session_state["load_pdf"] = ""
-        st.session_state["fetch_id_input"] = ""
-        st.session_state["last_fetched_id"] = ""
-        st.session_state["upload_reset_counter"] += 1
-        st.session_state["trigger_reset"] = False
-
-    if st.session_state.get("load_noc") != "":
+    if st.session_state.get("load_noc", "") != "":
         st.session_state["f_noc"] = st.session_state["load_noc"]
         st.session_state["f_date"] = st.session_state["load_date"]
         st.session_state["f_org"] = st.session_state["load_org"]
@@ -660,7 +663,6 @@ def render_entry_tab():
     with sc2: filter_from = st.text_input("From Date (DD.MM.YYYY)", placeholder="Optional", key="filter_from_active")
     with sc3: filter_to = st.text_input("To Date (DD.MM.YYYY)", placeholder="Optional", key="filter_to_active")
 
-    # Sorted by record_id ascending as requested
     cursor.execute("SELECT record_id, mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, mha_noc_copy, created_by, modified_by FROM n_records WHERE status = 'ACTIVE' ORDER BY record_id ASC")
     all_rows = cursor.fetchall()
 
