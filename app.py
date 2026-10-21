@@ -384,7 +384,21 @@ def is_expired(noc_date_str, validity_str):
         return False
 
 def reset_form_state():
-    st.session_state["trigger_reset"] = True
+    st.session_state["f_noc"] = ""
+    st.session_state["f_date"] = ""
+    st.session_state["f_org"] = ""
+    st.session_state["f_val_y"] = 0
+    st.session_state["f_val_m"] = 0
+    st.session_state["f_val_d"] = 0
+    st.session_state["f_gsps"] = ""
+    st.session_state["f_reg"] = ""
+    st.session_state["f_pdf"] = ""
+    st.session_state["load_noc"] = ""
+    st.session_state["load_date"] = ""
+    st.session_state["load_org"] = ""
+    st.session_state["fetch_id_input"] = ""
+    st.session_state["last_fetched_id"] = ""
+    st.session_state["upload_reset_counter"] += 1
 
 def on_fetch_id_change():
     fetch_val = st.session_state.get("fetch_id_input", "").strip()
@@ -523,11 +537,14 @@ def render_entry_tab():
 
         active_file_path = st.session_state.get("f_pdf", "") or shared_noc_copy
 
+        remove_attachment = False
         if uploaded_file is None and active_file_path:
             st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Linked NOC Document Attached in Cloud</span>', unsafe_allow_html=True)
             st.markdown(f"[🔗 Open / Download Linked Document]({active_file_path})")
+            remove_attachment = st.checkbox("🗑️ Remove current file attachment", key="remove_attachment_chk")
 
         st.markdown("")
+        # Action Bar: Save | Fetch Record ID (paired right next to Update) | Update | Clear
         b1, b_fetch, b2, b3 = st.columns([1.2, 1.1, 1.2, 1])
         with b1:
             st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
@@ -644,9 +661,11 @@ def render_entry_tab():
                 if check_duplicate(clean_noc_num, noc_date, single_gsps, clean_region, exclude_id=target_id):
                     st.error("Another active record with these details (NOC, Date, GSPS, Region) already exists!")
                 else:
-                    old_noc_copy = get_existing_noc_copy(clean_noc_num, noc_date, clean_org)
                     final_pdf_path = shared_noc_copy
-                    if uploaded_file is not None and not file_error:
+                    if remove_attachment:
+                        final_pdf_path = ""
+                        st.session_state["f_pdf"] = ""
+                    elif uploaded_file is not None and not file_error:
                         safe_noc = clean_noc_num.replace("/", "_").replace("\\", "_")
                         safe_date = noc_date.replace(".", "_")
                         safe_org = clean_org.replace("/", "_").replace("\\", "_").replace(" ", "_")
@@ -661,7 +680,12 @@ def render_entry_tab():
                         (clean_noc_num, noc_date, clean_org, validity_str, single_gsps, clean_region, final_pdf_path, st.session_state.name, target_id)
                     )
                     
-                    if final_pdf_path:
+                    if remove_attachment:
+                        cursor.execute(
+                            "UPDATE n_records SET mha_noc_copy = '' WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
+                            (clean_noc_num, noc_date, clean_org)
+                        )
+                    elif final_pdf_path:
                         cursor.execute(
                             "UPDATE n_records SET mha_noc_copy = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
                             (final_pdf_path, clean_noc_num, noc_date, clean_org)
