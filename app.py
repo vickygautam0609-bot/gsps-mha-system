@@ -384,21 +384,7 @@ def is_expired(noc_date_str, validity_str):
         return False
 
 def reset_form_state():
-    st.session_state["f_noc"] = ""
-    st.session_state["f_date"] = ""
-    st.session_state["f_org"] = ""
-    st.session_state["f_val_y"] = 0
-    st.session_state["f_val_m"] = 0
-    st.session_state["f_val_d"] = 0
-    st.session_state["f_gsps"] = ""
-    st.session_state["f_reg"] = ""
-    st.session_state["f_pdf"] = ""
-    st.session_state["load_noc"] = ""
-    st.session_state["load_date"] = ""
-    st.session_state["load_org"] = ""
-    st.session_state["fetch_id_input"] = ""
-    st.session_state["last_fetched_id"] = ""
-    st.session_state["upload_reset_counter"] += 1
+    st.session_state["trigger_reset"] = True
 
 def on_fetch_id_change():
     fetch_val = st.session_state.get("fetch_id_input", "").strip()
@@ -439,6 +425,24 @@ def on_fetch_id_change():
 # TAB BUILDER FUNCTIONS
 # ==========================================
 def render_entry_tab():
+    if st.session_state.get("trigger_reset", False):
+        st.session_state["f_noc"] = ""
+        st.session_state["f_date"] = ""
+        st.session_state["f_org"] = ""
+        st.session_state["f_val_y"] = 0
+        st.session_state["f_val_m"] = 0
+        st.session_state["f_val_d"] = 0
+        st.session_state["f_gsps"] = ""
+        st.session_state["f_reg"] = ""
+        st.session_state["f_pdf"] = ""
+        st.session_state["load_noc"] = ""
+        st.session_state["load_date"] = ""
+        st.session_state["load_org"] = ""
+        st.session_state["fetch_id_input"] = ""
+        st.session_state["last_fetched_id"] = ""
+        st.session_state["upload_reset_counter"] += 1
+        st.session_state["trigger_reset"] = False
+
     if st.session_state.get("load_noc", "") != "":
         st.session_state["f_noc"] = st.session_state["load_noc"]
         st.session_state["f_date"] = st.session_state["load_date"]
@@ -642,8 +646,8 @@ def render_entry_tab():
                     
                     if final_pdf_path:
                         cursor.execute(
-                            "UPDATE n_records SET mha_noc_copy = %s, validity = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
-                            (final_pdf_path, validity_str, clean_noc_num, noc_date, clean_org)
+                            "UPDATE n_records SET mha_noc_copy = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
+                            (final_pdf_path, clean_noc_num, noc_date, clean_org)
                         )
                     else:
                         cursor.execute(
