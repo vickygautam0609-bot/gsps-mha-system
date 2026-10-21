@@ -230,6 +230,20 @@ if not st.session_state.logged_in:
                         st.session_state.p_reports = user[4]
                         st.session_state.p_trash = user[5]
                         st.session_state.p_users = 1 if user[1] == 'Administrator' else user[6]
+                        
+                        # Clear form entry fields on login
+                        st.session_state["f_noc"] = ""
+                        st.session_state["f_date"] = ""
+                        st.session_state["f_org"] = ""
+                        st.session_state["f_val_y"] = 0
+                        st.session_state["f_val_m"] = 0
+                        st.session_state["f_val_d"] = 0
+                        st.session_state["f_gsps"] = ""
+                        st.session_state["f_reg"] = ""
+                        st.session_state["f_pdf"] = ""
+                        st.session_state["fetch_id_input"] = ""
+                        st.session_state["last_fetched_id"] = ""
+
                         st.toast(f"Welcome back, {user[0]}!", icon="👋")
                         st.rerun()
                 else:
@@ -385,7 +399,6 @@ def on_fetch_id_change():
         elif fetched_data[7] == 'DELETED':
             st.toast(f"⚠️ Record ID #{target_id} is already deleted.", icon="⚠️")
         else:
-            # Store into temporary load variables instead of direct widget keys
             st.session_state["load_noc"] = fetched_data[0]
             st.session_state["load_date"] = fetched_data[1]
             st.session_state["load_org"] = fetched_data[2]
@@ -423,7 +436,6 @@ def render_entry_tab():
         st.session_state["upload_reset_counter"] += 1
         st.session_state["trigger_reset"] = False
 
-    # Apply pre-loaded values to form state keys before widgets render
     if st.session_state.get("load_noc") != "":
         st.session_state["f_noc"] = st.session_state["load_noc"]
         st.session_state["f_date"] = st.session_state["load_date"]
@@ -434,7 +446,6 @@ def render_entry_tab():
         st.session_state["f_gsps"] = st.session_state["load_gsps"]
         st.session_state["f_reg"] = st.session_state["load_reg"]
         st.session_state["f_pdf"] = st.session_state["load_pdf"]
-        # Clear temporary load buffer
         st.session_state["load_noc"] = ""
 
     st.subheader("Record Entry & Management")
@@ -649,7 +660,8 @@ def render_entry_tab():
     with sc2: filter_from = st.text_input("From Date (DD.MM.YYYY)", placeholder="Optional", key="filter_from_active")
     with sc3: filter_to = st.text_input("To Date (DD.MM.YYYY)", placeholder="Optional", key="filter_to_active")
 
-    cursor.execute("SELECT record_id, mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, mha_noc_copy, created_by, modified_by FROM n_records WHERE status = 'ACTIVE'")
+    # Sorted by record_id ascending as requested
+    cursor.execute("SELECT record_id, mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, mha_noc_copy, created_by, modified_by FROM n_records WHERE status = 'ACTIVE' ORDER BY record_id ASC")
     all_rows = cursor.fetchall()
 
     filtered_data = []
