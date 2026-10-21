@@ -451,12 +451,8 @@ def render_entry_tab():
         st.session_state["f_pdf"] = st.session_state["load_pdf"]
         st.session_state["load_noc"] = ""
 
-    st.subheader("Record Entry & Management")
-
     # --- TWO-ROW FORMAT: HEADING ON RIGHT, INPUT FIELD ON LEFT ---
     with st.container():
-        st.markdown("**MHA NOC Information**")
-        
         # Row 1: MHA NOC Number & NOC Date
         r1_col1, r1_col2 = st.columns(2)
         with r1_col1:
@@ -661,8 +657,8 @@ def render_entry_tab():
                     
                     if final_pdf_path:
                         cursor.execute(
-                            "UPDATE n_records SET mha_noc_copy = %s, validity = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
-                            (final_pdf_path, validity_str, clean_noc_num, noc_date, clean_org)
+                            "UPDATE n_records SET mha_noc_copy = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
+                            (final_pdf_path, clean_noc_num, noc_date, clean_org)
                         )
                     else:
                         cursor.execute(
