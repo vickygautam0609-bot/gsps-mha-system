@@ -384,7 +384,21 @@ def is_expired(noc_date_str, validity_str):
         return False
 
 def reset_form_state():
-    st.session_state["trigger_reset"] = True
+    st.session_state["f_noc"] = ""
+    st.session_state["f_date"] = ""
+    st.session_state["f_org"] = ""
+    st.session_state["f_val_y"] = 0
+    st.session_state["f_val_m"] = 0
+    st.session_state["f_val_d"] = 0
+    st.session_state["f_gsps"] = ""
+    st.session_state["f_reg"] = ""
+    st.session_state["f_pdf"] = ""
+    st.session_state["load_noc"] = ""
+    st.session_state["load_date"] = ""
+    st.session_state["load_org"] = ""
+    st.session_state["fetch_id_input"] = ""
+    st.session_state["last_fetched_id"] = ""
+    st.session_state["upload_reset_counter"] += 1
 
 def on_fetch_id_change():
     fetch_val = st.session_state.get("fetch_id_input", "").strip()
@@ -425,24 +439,6 @@ def on_fetch_id_change():
 # TAB BUILDER FUNCTIONS
 # ==========================================
 def render_entry_tab():
-    if st.session_state.get("trigger_reset", False):
-        st.session_state["f_noc"] = ""
-        st.session_state["f_date"] = ""
-        st.session_state["f_org"] = ""
-        st.session_state["f_val_y"] = 0
-        st.session_state["f_val_m"] = 0
-        st.session_state["f_val_d"] = 0
-        st.session_state["f_gsps"] = ""
-        st.session_state["f_reg"] = ""
-        st.session_state["f_pdf"] = ""
-        st.session_state["load_noc"] = ""
-        st.session_state["load_date"] = ""
-        st.session_state["load_org"] = ""
-        st.session_state["fetch_id_input"] = ""
-        st.session_state["last_fetched_id"] = ""
-        st.session_state["upload_reset_counter"] += 1
-        st.session_state["trigger_reset"] = False
-
     if st.session_state.get("load_noc", "") != "":
         st.session_state["f_noc"] = st.session_state["load_noc"]
         st.session_state["f_date"] = st.session_state["load_date"]
@@ -457,16 +453,32 @@ def render_entry_tab():
 
     st.subheader("Record Entry & Management")
 
+    # --- TWO-ROW FORMAT: HEADING ON RIGHT, INPUT FIELD ON LEFT ---
     with st.container():
         st.markdown("**MHA NOC Information**")
-        col1, col2 = st.columns(2)
-        with col1:
+        
+        # Row 1: MHA NOC Number & NOC Date
+        r1_col1, r1_col2 = st.columns(2)
+        with r1_col1:
             noc_num = st.text_input("NOC Number*", key="f_noc", placeholder="e.g., 11016/...")
-            org = st.text_input("Organisation*", key="f_org", placeholder="e.g., BSNL / Inmarsat")
-        with col2:
+        with r1_col2:
+            st.markdown("<div style='padding-top: 6px;'><b>NOC Number*</b></div>", unsafe_allow_html=True)
+
+        r2_col1, r2_col2 = st.columns(2)
+        with r2_col1:
             noc_date = st.text_input("NOC Date (DD.MM.YYYY)*", key="f_date", placeholder="DD.MM.YYYY")
-            
-            st.markdown("Validity Period*")
+        with r2_col2:
+            st.markdown("<div style='padding-top: 6px;'><b>NOC Date (DD.MM.YYYY)*</b></div>", unsafe_allow_html=True)
+
+        # Row 2: Organisation & Validity Period
+        r3_col1, r3_col2 = st.columns(2)
+        with r3_col1:
+            org = st.text_input("Organisation*", key="f_org", placeholder="e.g., BSNL / Inmarsat")
+        with r3_col2:
+            st.markdown("<div style='padding-top: 6px;'><b>Organisation*</b></div>", unsafe_allow_html=True)
+
+        r4_col1, r4_col2 = st.columns(2)
+        with r4_col1:
             v_col1, v_col2, v_col3 = st.columns(3)
             with v_col1:
                 val_years = st.number_input("Years", min_value=0, step=1, format="%d", key="f_val_y")
@@ -474,7 +486,10 @@ def render_entry_tab():
                 val_months = st.number_input("Months", min_value=0, max_value=11, step=1, format="%d", key="f_val_m")
             with v_col3:
                 val_days = st.number_input("Days", min_value=0, max_value=31, step=1, format="%d", key="f_val_d")
+        with r4_col2:
+            st.markdown("<div style='padding-top: 6px;'><b>Validity Period* (Y / M / D)</b></div>", unsafe_allow_html=True)
 
+        st.markdown("---")
         st.markdown("**GSPS Numbers and Permitted Restricted Areas**")
         gsps_num = st.text_area("GSPS Number(s) (Comma/Newline sep)*", key="f_gsps", height=65, placeholder="Enter 10-digit GSPS numbers...")
 
@@ -646,8 +661,8 @@ def render_entry_tab():
                     
                     if final_pdf_path:
                         cursor.execute(
-                            "UPDATE n_records SET mha_noc_copy = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
-                            (final_pdf_path, clean_noc_num, noc_date, clean_org)
+                            "UPDATE n_records SET mha_noc_copy = %s, validity = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
+                            (final_pdf_path, validity_str, clean_noc_num, noc_date, clean_org)
                         )
                     else:
                         cursor.execute(
