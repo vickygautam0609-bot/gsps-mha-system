@@ -451,25 +451,27 @@ def render_entry_tab():
         st.session_state["f_pdf"] = st.session_state["load_pdf"]
         st.session_state["load_noc"] = ""
 
-    # --- TWO-ROW FORMAT: HEADING ON RIGHT, INPUT FIELD ON LEFT ---
+    st.subheader("Record Entry & Management")
+
+    # --- TWO-ROW FORMAT: HEADING ON RIGHT, INPUT FIELD ON LEFT (WITHOUT TEXT LABELS) ---
     with st.container():
         # Row 1: MHA NOC Number & NOC Date
         r1_col1, r1_col2 = st.columns(2)
         with r1_col1:
-            noc_num = st.text_input("NOC Number*", key="f_noc", placeholder="e.g., 11016/...")
+            noc_num = st.text_input("NOC Number*", key="f_noc", placeholder="e.g., 11016/...", label_visibility="collapsed")
         with r1_col2:
             st.markdown("<div style='padding-top: 6px;'><b>NOC Number*</b></div>", unsafe_allow_html=True)
 
         r2_col1, r2_col2 = st.columns(2)
         with r2_col1:
-            noc_date = st.text_input("NOC Date (DD.MM.YYYY)*", key="f_date", placeholder="DD.MM.YYYY")
+            noc_date = st.text_input("NOC Date (DD.MM.YYYY)*", key="f_date", placeholder="DD.MM.YYYY", label_visibility="collapsed")
         with r2_col2:
             st.markdown("<div style='padding-top: 6px;'><b>NOC Date (DD.MM.YYYY)*</b></div>", unsafe_allow_html=True)
 
         # Row 2: Organisation & Validity Period
         r3_col1, r3_col2 = st.columns(2)
         with r3_col1:
-            org = st.text_input("Organisation*", key="f_org", placeholder="e.g., BSNL / Inmarsat")
+            org = st.text_input("Organisation*", key="f_org", placeholder="e.g., BSNL / Inmarsat", label_visibility="collapsed")
         with r3_col2:
             st.markdown("<div style='padding-top: 6px;'><b>Organisation*</b></div>", unsafe_allow_html=True)
 
@@ -477,11 +479,11 @@ def render_entry_tab():
         with r4_col1:
             v_col1, v_col2, v_col3 = st.columns(3)
             with v_col1:
-                val_years = st.number_input("Years", min_value=0, step=1, format="%d", key="f_val_y")
+                val_years = st.number_input("Years", min_value=0, step=1, format="%d", key="f_val_y", label_visibility="collapsed")
             with v_col2:
-                val_months = st.number_input("Months", min_value=0, max_value=11, step=1, format="%d", key="f_val_m")
+                val_months = st.number_input("Months", min_value=0, max_value=11, step=1, format="%d", key="f_val_m", label_visibility="collapsed")
             with v_col3:
-                val_days = st.number_input("Days", min_value=0, max_value=31, step=1, format="%d", key="f_val_d")
+                val_days = st.number_input("Days", min_value=0, max_value=31, step=1, format="%d", key="f_val_d", label_visibility="collapsed")
         with r4_col2:
             st.markdown("<div style='padding-top: 6px;'><b>Validity Period* (Y / M / D)</b></div>", unsafe_allow_html=True)
 
@@ -522,6 +524,7 @@ def render_entry_tab():
             st.markdown(f"[🔗 Open / Download Linked Document]({active_file_path})")
 
         st.markdown("")
+        # Action Bar: Save | Fetch Record ID (paired right next to Update) | Update | Clear
         b1, b_fetch, b2, b3 = st.columns([1.2, 1.1, 1.2, 1])
         with b1:
             st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
