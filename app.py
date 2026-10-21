@@ -384,21 +384,7 @@ def is_expired(noc_date_str, validity_str):
         return False
 
 def reset_form_state():
-    st.session_state["f_noc"] = ""
-    st.session_state["f_date"] = ""
-    st.session_state["f_org"] = ""
-    st.session_state["f_val_y"] = 0
-    st.session_state["f_val_m"] = 0
-    st.session_state["f_val_d"] = 0
-    st.session_state["f_gsps"] = ""
-    st.session_state["f_reg"] = ""
-    st.session_state["f_pdf"] = ""
-    st.session_state["load_noc"] = ""
-    st.session_state["load_date"] = ""
-    st.session_state["load_org"] = ""
-    st.session_state["fetch_id_input"] = ""
-    st.session_state["last_fetched_id"] = ""
-    st.session_state["upload_reset_counter"] += 1
+    st.session_state["trigger_reset"] = True
 
 def on_fetch_id_change():
     fetch_val = st.session_state.get("fetch_id_input", "").strip()
@@ -439,6 +425,24 @@ def on_fetch_id_change():
 # TAB BUILDER FUNCTIONS
 # ==========================================
 def render_entry_tab():
+    if st.session_state.get("trigger_reset", False):
+        st.session_state["f_noc"] = ""
+        st.session_state["f_date"] = ""
+        st.session_state["f_org"] = ""
+        st.session_state["f_val_y"] = 0
+        st.session_state["f_val_m"] = 0
+        st.session_state["f_val_d"] = 0
+        st.session_state["f_gsps"] = ""
+        st.session_state["f_reg"] = ""
+        st.session_state["f_pdf"] = ""
+        st.session_state["load_noc"] = ""
+        st.session_state["load_date"] = ""
+        st.session_state["load_org"] = ""
+        st.session_state["fetch_id_input"] = ""
+        st.session_state["last_fetched_id"] = ""
+        st.session_state["upload_reset_counter"] += 1
+        st.session_state["trigger_reset"] = False
+
     if st.session_state.get("load_noc", "") != "":
         st.session_state["f_noc"] = st.session_state["load_noc"]
         st.session_state["f_date"] = st.session_state["load_date"]
@@ -524,7 +528,6 @@ def render_entry_tab():
             st.markdown(f"[🔗 Open / Download Linked Document]({active_file_path})")
 
         st.markdown("")
-        # Action Bar: Save | Fetch Record ID (paired right next to Update) | Update | Clear
         b1, b_fetch, b2, b3 = st.columns([1.2, 1.1, 1.2, 1])
         with b1:
             st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
