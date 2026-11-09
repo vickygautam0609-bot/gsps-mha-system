@@ -517,10 +517,7 @@ def render_entry_tab():
             else:
                 st.markdown(f'<span style="color: #1f538d; font-weight: bold; font-size: 12px;">📎 Uploaded: {uploaded_file.name}</span>', unsafe_allow_html=True)
 
-        shared_noc_copy = ""
-        if noc_num.strip() and noc_date.strip() and org.strip():
-            shared_noc_copy = get_existing_noc_copy(noc_num.strip(), noc_date.strip(), org.strip())
-
+        shared_noc_copy = get_existing_noc_copy(noc_num.strip(), noc_date.strip(), org.strip()) if (noc_num.strip() and noc_date.strip() and org.strip()) else ""
         active_file_path = st.session_state.get("f_pdf", "") or shared_noc_copy
 
         remove_attachment = False
@@ -586,7 +583,6 @@ def render_entry_tab():
                             conflict = True
                             break
                     if not conflict:
-                        old_noc_copy = get_existing_noc_copy(clean_noc_num, noc_date, clean_org)
                         final_pdf_path = shared_noc_copy
                         if uploaded_file is not None and not file_error:
                             safe_noc = clean_noc_num.replace("/", "_").replace("\\", "_")
@@ -646,7 +642,8 @@ def render_entry_tab():
                 if check_duplicate(clean_noc_num, noc_date, single_gsps, clean_region, exclude_id=target_id):
                     st.error("Another active record with these details (NOC, Date, GSPS, Region) already exists!")
                 else:
-                    final_pdf_path = shared_noc_copy
+                    # Determine the new file path during update
+                    final_pdf_path = active_file_path
                     if remove_attachment:
                         final_pdf_path = ""
                         st.session_state["f_pdf"] = ""
@@ -660,28 +657,19 @@ def render_entry_tab():
                         final_pdf_path = upload_file_to_supabase(uploaded_file, filename)
                         st.session_state["f_pdf"] = final_pdf_path
 
+                    # Update current target record
                     cursor.execute(
                         "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, mha_noc_copy = %s, modified_by = %s WHERE record_id = %s",
                         (clean_noc_num, noc_date, clean_org, validity_str, single_gsps, clean_region, final_pdf_path, st.session_state.name, target_id)
                     )
                     
-                    if remove_attachment:
-                        cursor.execute(
-                            "UPDATE n_records SET mha_noc_copy = '' WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
-                            (clean_noc_num, noc_date, clean_org)
-                        )
-                    elif final_pdf_path:
-                        cursor.execute(
-                            "UPDATE n_records SET mha_noc_copy = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
-                            (final_pdf_path, clean_noc_num, noc_date, clean_org)
-                        )
-                    else:
-                        cursor.execute(
-                            "UPDATE n_records SET validity = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
-                            (validity_str, clean_noc_num, noc_date, clean_org)
-                        )
+                    # Synchronize attachment and validity across all matching records with the same NOC details
+                    cursor.execute(
+                        "UPDATE n_records SET mha_noc_copy = %s, validity = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
+                        (final_pdf_path, validity_str, clean_noc_num, noc_date, clean_org)
+                    )
                     
-                    st.toast(f"Record ID #{target_id} updated successfully and validity/attachment synchronized across matching records!", icon="✅")
+                    st.toast(f"Record ID #{target_id} updated successfully and attachment synchronized across matching records!", icon="✅")
                     reset_form_state()
                     st.rerun()
 
