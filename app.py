@@ -206,7 +206,7 @@ if st.session_state.logged_in:
         st.stop()
 
 # ==========================================
-# AUTHENTICATION / LOGIN SCREEN & RESET
+# AUTHENTICATION / LOGIN SCREEN & SECURE RESET
 # ==========================================
 if not st.session_state.logged_in:
     st.markdown("<h2 style='text-align: center; color: #1f538d;'>GSPS MHA Record Management System</h2>", unsafe_allow_html=True)
@@ -252,18 +252,19 @@ if not st.session_state.logged_in:
                     else:
                         st.error("Invalid username or password!")
             
-            if st.button("🔑 Forgot / Reset Password?", use_container_width=True):
+            if st.button("🔑 Change / Reset Password?", use_container_width=True):
                 st.session_state.show_forgot_password = True
                 st.rerun()
         else:
-            st.markdown("<h4 style='text-align: center; color: gray;'>Password Assistance / Reset Request</h4>", unsafe_allow_html=True)
+            st.markdown("<h4 style='text-align: center; color: gray;'>Secure Password Change</h4>", unsafe_allow_html=True)
             with st.form("forgot_pw_form"):
-                f_uname = st.text_input("Enter your Username").strip().upper()
-                f_name = st.text_input("Enter your Full Name").strip()
+                f_uname = st.text_input("Username").strip().upper()
+                f_name = st.text_input("Full Name").strip()
+                old_pwd = st.text_input("Old (Current) Password", type="password")
                 new_reset_pwd = st.text_input("New Password", type="password")
                 confirm_reset_pwd = st.text_input("Confirm New Password", type="password")
                 
-                reset_submit = st.form_submit_button("Reset Password", use_container_width=True)
+                reset_submit = st.form_submit_button("Update Password", use_container_width=True)
                 back_btn = st.form_submit_button("Back to Login", use_container_width=True)
                 
                 if back_btn:
@@ -271,20 +272,20 @@ if not st.session_state.logged_in:
                     st.rerun()
 
                 if reset_submit:
-                    if not f_uname or not f_name or not new_reset_pwd or not confirm_reset_pwd:
-                        st.error("Please fill out all fields.")
+                    if not f_uname or not f_name or not old_pwd or not new_reset_pwd or not confirm_reset_pwd:
+                        st.error("Please fill out all fields, including your old password.")
                     elif new_reset_pwd != confirm_reset_pwd:
-                        st.error("Passwords do not match!")
+                        st.error("New passwords do not match!")
                     else:
-                        cursor.execute("SELECT user_id, name FROM users WHERE username = %s", (f_uname,))
+                        cursor.execute("SELECT user_id, name, password FROM users WHERE username = %s", (f_uname,))
                         db_user = cursor.fetchone()
-                        if db_user and db_user[1].strip().lower() == f_name.lower():
+                        if db_user and db_user[1].strip().lower() == f_name.lower() and db_user[2].strip() == old_pwd.strip():
                             cursor.execute("UPDATE users SET password = %s WHERE username = %s", (new_reset_pwd.strip(), f_uname))
-                            st.success("✅ Password reset successfully! Please log in with your new password.")
+                            st.success("✅ Password updated successfully! Please log in with your new password.")
                             st.session_state.show_forgot_password = False
                             st.rerun()
                         else:
-                            st.error("⚠️ Verification failed: Username and Full Name combination not found.")
+                            st.error("⚠️ Verification failed: Incorrect Username, Full Name, or Old Password.")
     st.stop()
 
 # ==========================================
@@ -1003,8 +1004,8 @@ def render_users_tab():
 
     user_counter = st.session_state.get("new_user_counter", 0)
 
-    # --- PASSWORD VISIBILITY & UPDATE SECTION FOR ADMINISTRATOR ---
-    with st.expander("🔑 Administrator: View Passwords & Update User Credentials", expanded=False):
+    # --- ADMINISTRATOR PASSWORD VISIBILITY & OVERWRITE SECTION ---
+    with st.expander("🔑 Administrator: View Passwords & Update Any User Credentials", expanded=False):
         if st.session_state.role == "Administrator":
             cursor.execute("SELECT user_id, name, username, role, password FROM users")
             u_rows = cursor.fetchall()
@@ -1016,7 +1017,7 @@ def render_users_tab():
                     "Full Name": ur[1],
                     "Username": ur[2],
                     "Role": ur[3],
-                    "Password": ur[4]  # Administrator can view plaintext/stored passwords
+                    "Password": ur[4]  # Visible to Administrator
                 })
             st.dataframe(pd.DataFrame(admin_user_data), hide_index=True, use_container_width=True)
             st.markdown("---")
