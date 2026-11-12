@@ -737,29 +737,44 @@ def render_entry_tab():
                 st.toast(f"Successfully moved {len(selected_to_delete)} record(s) to Deleted Records.", icon="🗑️")
                 st.rerun()
 
-        # --- BAR GRAPH VISUALIZATION BELOW ACTIVE RECORDS TABLE ---
+        # --- TOTAL COUNT & BAR GRAPH VISUALIZATION ---
         st.markdown("---")
-        st.write("### 📊 Allowed Region Distribution (GSPS Count)")
+        st.write("### 📊 GSPS Metrics & Allowed Region Distribution")
         
+        # Calculate total unique GSPS numbers and split region distribution
         region_count_data = {}
+        unique_gsps_set = set()
         for r in active_raw_rows:
-            reg = r[6].strip()
-            region_count_data[reg] = region_count_data.get(reg, 0) + 1
-        
-        chart_df = pd.DataFrame(list(region_count_data.items()), columns=["Allowed Region", "GSPS Count"])
-        
-        fig = px.bar(
-            chart_df, 
-            x="Allowed Region", 
-            y="GSPS Count", 
-            text="GSPS Count",
-            title="GSPS Numbers Distribution by Allowed Region",
-            color="Allowed Region",
-            color_discrete_sequence=px.colors.qualitative.Bold
-        )
-        fig.update_traces(textposition='outside')
-        fig.update_layout(margin=dict(t=40, b=10, l=10, r=10), height=380, showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
+            gsps_val = r[5].strip()
+            if gsps_val:
+                unique_gsps_set.add(gsps_val)
+            
+            raw_reg = r[6]
+            split_regs = [sub_reg.strip() for sub_reg in raw_reg.replace("&", ",").split(",") if sub_reg.strip()]
+            for sub_reg in split_regs:
+                region_count_data[sub_reg] = region_count_data.get(sub_reg, 0) + 1
+
+        # Display Total GSPS Count metric
+        m_col1, m_col2 = st.columns([1, 3])
+        with m_col1:
+            st.metric(label="Total Active GSPS Records", value=len(active_raw_rows))
+            st.metric(label="Unique GSPS Numbers", value=len(unique_gsps_set))
+
+        with m_col2:
+            chart_df = pd.DataFrame(list(region_count_data.items()), columns=["Allowed Region", "GSPS Count"])
+            fig = px.bar(
+                chart_df, 
+                x="Allowed Region", 
+                y="GSPS Count", 
+                text="GSPS Count",
+                title="GSPS Numbers Distribution by Allowed Region (Unique Split)",
+                color="Allowed Region",
+                color_discrete_sequence=px.colors.qualitative.Bold
+            )
+            fig.update_traces(textposition='outside')
+            fig.update_layout(margin=dict(t=40, b=10, l=10, r=10), height=320, showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
+            
         st.markdown("---")
     else:
         st.info("No active records found matching criteria.")
