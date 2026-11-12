@@ -175,6 +175,9 @@ if "logged_in" not in st.session_state:
     st.session_state.p_trash = 1
     st.session_state.p_users = 0
 
+if "show_forgot_password" not in st.session_state:
+    st.session_state.show_forgot_password = False
+
 for key, default_val in [
     ("f_noc", ""), ("f_date", ""), ("f_org", ""), 
     ("f_val_y", 0), ("f_val_m", 0), ("f_val_d", 0), 
@@ -203,57 +206,85 @@ if st.session_state.logged_in:
         st.stop()
 
 # ==========================================
-# AUTHENTICATION / LOGIN SCREEN
+# AUTHENTICATION / LOGIN SCREEN & RESET
 # ==========================================
 if not st.session_state.logged_in:
     st.markdown("<h2 style='text-align: center; color: #1f538d;'>GSPS MHA Record Management System</h2>", unsafe_allow_html=True)
-    st.markdown("<h4 style='text-align: center; color: gray;'>Please log in to continue</h4>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
-        with st.form("login_form"):
-            uname = st.text_input("Username").strip().upper()
-            pwd = st.text_input("Password", type="password")
-            submit = st.form_submit_button("Login", use_container_width=True)
-            
-            if submit:
-                cursor.execute("SELECT name, role, username, p_entry, p_reports, p_trash, p_users, status FROM users WHERE username = %s AND password = %s", (uname, pwd.strip()))
-                user = cursor.fetchone()
-                if user:
-                    if user[7] != 'ACTIVE':
-                        st.error("⚠️ Your account is inactive. Please contact the administrator.")
-                    else:
-                        st.session_state.logged_in = True
-                        st.session_state.name = user[0]
-                        st.session_state.role = user[1]
-                        st.session_state.username = user[2]
-                        
-                        st.session_state.p_entry = user[3]
-                        st.session_state.p_reports = user[4]
-                        st.session_state.p_trash = user[5]
-                        st.session_state.p_users = 1 if user[1] == 'Administrator' else user[6]
-                        
-                        # Clear form entry fields on login
-                        st.session_state["f_noc"] = ""
-                        st.session_state["f_date"] = ""
-                        st.session_state["f_org"] = ""
-                        st.session_state["f_val_y"] = 0
-                        st.session_state["f_val_m"] = 0
-                        st.session_state["f_val_d"] = 0
-                        st.session_state["f_gsps"] = ""
-                        st.session_state["f_reg"] = ""
-                        st.session_state["f_pdf"] = ""
-                        st.session_state["load_noc"] = ""
-                        st.session_state["load_date"] = ""
-                        st.session_state["load_org"] = ""
-                        st.session_state["fetch_id_input"] = ""
-                        st.session_state["last_fetched_id"] = ""
-                        st.session_state["upload_reset_counter"] += 1
+        if not st.session_state.show_forgot_password:
+            st.markdown("<h4 style='text-align: center; color: gray;'>Please log in to continue</h4>", unsafe_allow_html=True)
+            with st.form("login_form"):
+                uname = st.text_input("Username").strip().upper()
+                pwd = st.text_input("Password", type="password")
+                submit = st.form_submit_button("Login", use_container_width=True)
+                
+                if submit:
+                    cursor.execute("SELECT name, role, username, p_entry, p_reports, p_trash, p_users, status FROM users WHERE username = %s AND password = %s", (uname, pwd.strip()))
+                    user = cursor.fetchone()
+                    if user:
+                        if user[7] != 'ACTIVE':
+                            st.error("⚠️ Your account is inactive. Please contact the administrator.")
+                        else:
+                            st.session_state.logged_in = True
+                            st.session_state.name = user[0]
+                            st.session_state.role = user[1]
+                            st.session_state.username = user[2]
+                            st.session_state.p_entry = user[3]
+                            st.session_state.p_reports = user[4]
+                            st.session_state.p_trash = user[5]
+                            st.session_state.p_users = 1 if user[1] == 'Administrator' else user[6]
+                            
+                            st.session_state["f_noc"] = ""
+                            st.session_state["f_date"] = ""
+                            st.session_state["f_org"] = ""
+                            st.session_state["f_val_y"] = 0
+                            st.session_state["f_val_m"] = 0
+                            st.session_state["f_val_d"] = 0
+                            st.session_state["f_gsps"] = ""
+                            st.session_state["f_reg"] = ""
+                            st.session_state["f_pdf"] = ""
+                            st.session_state["upload_reset_counter"] += 1
 
-                        st.toast(f"Welcome back, {user[0]}!", icon="👋")
-                        st.rerun()
-                else:
-                    st.error("Invalid username or password!")
+                            st.toast(f"Welcome back, {user[0]}!", icon="👋")
+                            st.rerun()
+                    else:
+                        st.error("Invalid username or password!")
+            
+            if st.button("🔑 Forgot / Reset Password?", use_container_width=True):
+                st.session_state.show_forgot_password = True
+                st.rerun()
+        else:
+            st.markdown("<h4 style='text-align: center; color: gray;'>Password Assistance / Reset Request</h4>", unsafe_allow_html=True)
+            with st.form("forgot_pw_form"):
+                f_uname = st.text_input("Enter your Username").strip().upper()
+                f_name = st.text_input("Enter your Full Name").strip()
+                new_reset_pwd = st.text_input("New Password", type="password")
+                confirm_reset_pwd = st.text_input("Confirm New Password", type="password")
+                
+                reset_submit = st.form_submit_button("Reset Password", use_container_width=True)
+                back_btn = st.form_submit_button("Back to Login", use_container_width=True)
+                
+                if back_btn:
+                    st.session_state.show_forgot_password = False
+                    st.rerun()
+
+                if reset_submit:
+                    if not f_uname or not f_name or not new_reset_pwd or not confirm_reset_pwd:
+                        st.error("Please fill out all fields.")
+                    elif new_reset_pwd != confirm_reset_pwd:
+                        st.error("Passwords do not match!")
+                    else:
+                        cursor.execute("SELECT user_id, name FROM users WHERE username = %s", (f_uname,))
+                        db_user = cursor.fetchone()
+                        if db_user and db_user[1].strip().lower() == f_name.lower():
+                            cursor.execute("UPDATE users SET password = %s WHERE username = %s", (new_reset_pwd.strip(), f_uname))
+                            st.success("✅ Password reset successfully! Please log in with your new password.")
+                            st.session_state.show_forgot_password = False
+                            st.rerun()
+                        else:
+                            st.error("⚠️ Verification failed: Username and Full Name combination not found.")
     st.stop()
 
 # ==========================================
@@ -460,7 +491,6 @@ def render_entry_tab():
     st.subheader("Record Entry & Management")
 
     with st.container():
-        # Row 1: MHA NOC Number & NOC Date
         r1_col1, r1_col2 = st.columns(2)
         with r1_col1:
             noc_num = st.text_input("NOC Number*", key="f_noc", placeholder="e.g., 11016/...", label_visibility="collapsed")
@@ -473,7 +503,6 @@ def render_entry_tab():
         with r2_col2:
             st.markdown("<div style='padding-top: 6px;'><b>NOC Date (DD.MM.YYYY)*</b></div>", unsafe_allow_html=True)
 
-        # Row 2: Organisation & Validity Period
         r3_col1, r3_col2 = st.columns(2)
         with r3_col1:
             org = st.text_input("Organisation*", key="f_org", placeholder="e.g., BSNL / Inmarsat", label_visibility="collapsed")
@@ -737,7 +766,7 @@ def render_entry_tab():
                 st.toast(f"Successfully moved {len(selected_to_delete)} record(s) to Deleted Records.", icon="🗑️")
                 st.rerun()
 
-        # --- METRICS & NON-UNIQUE / DUPLICATE GSPS NUMBERS DISPLAY ---
+        # --- METRICS, NON-UNIQUE GSPS & BAR GRAPH VISUALIZATION ---
         st.markdown("---")
         st.write("### 📊 GSPS Metrics & Allowed Region Distribution")
         
@@ -753,7 +782,6 @@ def render_entry_tab():
             for sub_reg in split_regs:
                 region_count_data[sub_reg] = region_count_data.get(sub_reg, 0) + 1
 
-        # Calculate Non-Unique / Duplicate GSPS numbers
         non_unique_gsps = {g: count for g, count in gsps_frequency.items() if count > 1}
         unique_gsps_count = len(gsps_frequency)
 
@@ -975,15 +1003,31 @@ def render_users_tab():
 
     user_counter = st.session_state.get("new_user_counter", 0)
 
-    # --- PASSWORD UPDATE SECTION ---
-    with st.expander("🔑 Update User Passwords", expanded=False):
-        with st.form("update_password_form"):
+    # --- PASSWORD VISIBILITY & UPDATE SECTION FOR ADMINISTRATOR ---
+    with st.expander("🔑 Administrator: View Passwords & Update User Credentials", expanded=False):
+        if st.session_state.role == "Administrator":
+            cursor.execute("SELECT user_id, name, username, role, password FROM users")
+            u_rows = cursor.fetchall()
+            
+            admin_user_data = []
+            for ur in u_rows:
+                admin_user_data.append({
+                    "User ID": ur[0],
+                    "Full Name": ur[1],
+                    "Username": ur[2],
+                    "Role": ur[3],
+                    "Password": ur[4]  # Administrator can view plaintext/stored passwords
+                })
+            st.dataframe(pd.DataFrame(admin_user_data), hide_index=True, use_container_width=True)
+            st.markdown("---")
+
+        with st.form("admin_update_password_form"):
             cursor.execute("SELECT username, name, role FROM users")
             all_users = cursor.fetchall()
             user_dict = {f"{u[1]} ({u[0]}) - {u[2]}": u[0] for u in all_users}
             
             if st.session_state.role == "Administrator":
-                selected_display = st.selectbox("Select User", options=list(user_dict.keys()))
+                selected_display = st.selectbox("Select User to Change Password", options=list(user_dict.keys()))
                 target_uname = user_dict[selected_display]
             else:
                 target_uname = st.session_state.username
