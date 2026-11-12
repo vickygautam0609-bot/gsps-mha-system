@@ -17,13 +17,44 @@ from supabase import create_client, Client
 st.set_page_config(
     page_title="GSPS MHA Record Management System",
     page_icon="📡",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# --- STRICT BUTTON-ONLY CLICK, CUSTOM UPLOAD TEXT & TABLE HEADER CSS ---
+# --- STABLE LAYOUT, TAB ALIGNMENT & BUTTON-ONLY CLICK CSS ---
 st.markdown(
     """
     <style>
+    /* Prevent layout shifting and smooth out re-renders */
+    .stApp {
+        animation: fadeIn 0.25s ease-in-out;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0.95; }
+        to { opacity: 1; }
+    }
+    
+    /* Stabilize tab bar container alignment */
+    [data-testid="stTabs"] {
+        margin-top: 0px !important;
+    }
+    [data-testid="stTabs"] [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: transparent;
+    }
+    [data-testid="stTabs"] [data-baseweb="tab"] {
+        height: 42px;
+        white-space: pre-wrap;
+        background-color: #f8f9fa;
+        border-radius: 4px 4px 0px 0px;
+        font-weight: 600;
+        color: #1f538d;
+    }
+    [data-testid="stTabs"] [aria-selected="true"] {
+        background-color: #1f538d !important;
+        color: white !important;
+    }
+
     /* Disable clicks on the entire drag-and-drop dropzone box/row */
     [data-testid="stFileUploader"] section {
         pointer-events: none !important;
@@ -1017,7 +1048,7 @@ def render_users_tab():
                     "Full Name": ur[1],
                     "Username": ur[2],
                     "Role": ur[3],
-                    "Password": ur[4]  # Visible to Administrator
+                    "Password": ur[4]
                 })
             st.dataframe(pd.DataFrame(admin_user_data), hide_index=True, use_container_width=True)
             st.markdown("---")
