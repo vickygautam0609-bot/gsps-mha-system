@@ -1,7 +1,8 @@
 streamlit
 pandas
-psycopg[binary]
+psycopg
 reportlab
-openpyxl
-python-dateutil
 supabase
+python-dateutil
+openpyxl
+plotly
