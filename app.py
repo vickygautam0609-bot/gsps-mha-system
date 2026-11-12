@@ -737,11 +737,10 @@ def render_entry_tab():
                 st.toast(f"Successfully moved {len(selected_to_delete)} record(s) to Deleted Records.", icon="🗑️")
                 st.rerun()
 
-        # --- TOTAL COUNT & BAR GRAPH VISUALIZATION ---
+        # --- TOTAL COUNT & BAR GRAPH VISUALIZATION (SPLITTING ONLY BY COMMA) ---
         st.markdown("---")
         st.write("### 📊 GSPS Metrics & Allowed Region Distribution")
         
-        # Calculate total unique GSPS numbers and split region distribution
         region_count_data = {}
         unique_gsps_set = set()
         for r in active_raw_rows:
@@ -750,11 +749,11 @@ def render_entry_tab():
                 unique_gsps_set.add(gsps_val)
             
             raw_reg = r[6]
-            split_regs = [sub_reg.strip() for sub_reg in raw_reg.replace("&", ",").split(",") if sub_reg.strip()]
+            # Split strictly by comma (preserving ampersands, spaces, etc., intact in labels)
+            split_regs = [sub_reg.strip() for sub_reg in raw_reg.split(",") if sub_reg.strip()]
             for sub_reg in split_regs:
                 region_count_data[sub_reg] = region_count_data.get(sub_reg, 0) + 1
 
-        # Display Total GSPS Count metric
         m_col1, m_col2 = st.columns([1, 3])
         with m_col1:
             st.metric(label="Total Active GSPS Records", value=len(active_raw_rows))
@@ -767,7 +766,7 @@ def render_entry_tab():
                 x="Allowed Region", 
                 y="GSPS Count", 
                 text="GSPS Count",
-                title="GSPS Numbers Distribution by Allowed Region (Unique Split)",
+                title="GSPS Numbers Distribution by Allowed Region (Comma-Split)",
                 color="Allowed Region",
                 color_discrete_sequence=px.colors.qualitative.Bold
             )
