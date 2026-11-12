@@ -684,6 +684,7 @@ def render_entry_tab():
 
     filtered_data = []
     seen_ids = set()
+    active_raw_rows = []
     for r in all_rows:
         r_id, noc, dt, org_name, val, gsps, reg, noc_copy, creator, modifier = r
         if r_id in seen_ids:
@@ -698,6 +699,7 @@ def render_entry_tab():
                 continue
         
         seen_ids.add(r_id)
+        active_raw_rows.append(r)
         expired_flag = "⚠️ Expired" if is_expired(dt, val) else "Active"
         pdf_display = "📄 Attached" if noc_copy else "No File"
         filtered_data.append({
@@ -734,6 +736,31 @@ def render_entry_tab():
                     cursor.execute("UPDATE n_records SET status = 'DELETED', modified_by = %s WHERE record_id = %s", (st.session_state.name, r_id))
                 st.toast(f"Successfully moved {len(selected_to_delete)} record(s) to Deleted Records.", icon="🗑️")
                 st.rerun()
+
+        # --- BAR GRAPH VISUALIZATION BELOW ACTIVE RECORDS TABLE ---
+        st.markdown("---")
+        st.write("### 📊 Allowed Region Distribution (GSPS Count)")
+        
+        region_count_data = {}
+        for r in active_raw_rows:
+            reg = r[6].strip()
+            region_count_data[reg] = region_count_data.get(reg, 0) + 1
+        
+        chart_df = pd.DataFrame(list(region_count_data.items()), columns=["Allowed Region", "GSPS Count"])
+        
+        fig = px.bar(
+            chart_df, 
+            x="Allowed Region", 
+            y="GSPS Count", 
+            text="GSPS Count",
+            title="GSPS Numbers Distribution by Allowed Region",
+            color="Allowed Region",
+            color_discrete_sequence=px.colors.qualitative.Bold
+        )
+        fig.update_traces(textposition='outside')
+        fig.update_layout(margin=dict(t=40, b=10, l=10, r=10), height=380, showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown("---")
     else:
         st.info("No active records found matching criteria.")
 
@@ -778,31 +805,6 @@ def render_reports_tab():
         filtered_report_rows.append((noc, dt, org, val, gsps, reg, noc_copy))
 
     if filtered_report_rows:
-        # --- BAR GRAPH VISUALIZATION ---
-        st.markdown("---")
-        st.write("### 📊 Allowed Region Distribution (GSPS Count)")
-        
-        region_count_data = {}
-        for r in filtered_report_rows:
-            reg = r[5].strip()
-            region_count_data[reg] = region_count_data.get(reg, 0) + 1
-        
-        chart_df = pd.DataFrame(list(region_count_data.items()), columns=["Allowed Region", "GSPS Count"])
-        
-        fig = px.bar(
-            chart_df, 
-            x="Allowed Region", 
-            y="GSPS Count", 
-            text="GSPS Count",
-            title="GSPS Numbers Distribution by Allowed Region",
-            color="Allowed Region",
-            color_discrete_sequence=px.colors.qualitative.Bold
-        )
-        fig.update_traces(textposition='outside')
-        fig.update_layout(margin=dict(t=40, b=10, l=10, r=10), height=380, showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
-        st.markdown("---")
-
         grouped_data = {}
         for r in filtered_report_rows:
             noc, dt, org, val, gsps, reg, noc_copy = r
