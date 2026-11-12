@@ -737,27 +737,38 @@ def render_entry_tab():
                 st.toast(f"Successfully moved {len(selected_to_delete)} record(s) to Deleted Records.", icon="🗑️")
                 st.rerun()
 
-        # --- TOTAL COUNT & BAR GRAPH VISUALIZATION (SPLITTING ONLY BY COMMA) ---
+        # --- METRICS & NON-UNIQUE / DUPLICATE GSPS NUMBERS DISPLAY ---
         st.markdown("---")
         st.write("### 📊 GSPS Metrics & Allowed Region Distribution")
         
         region_count_data = {}
-        unique_gsps_set = set()
+        gsps_frequency = {}
         for r in active_raw_rows:
             gsps_val = r[5].strip()
             if gsps_val:
-                unique_gsps_set.add(gsps_val)
+                gsps_frequency[gsps_val] = gsps_frequency.get(gsps_val, 0) + 1
             
             raw_reg = r[6]
-            # Split strictly by comma (preserving ampersands, spaces, etc., intact in labels)
             split_regs = [sub_reg.strip() for sub_reg in raw_reg.split(",") if sub_reg.strip()]
             for sub_reg in split_regs:
                 region_count_data[sub_reg] = region_count_data.get(sub_reg, 0) + 1
 
-        m_col1, m_col2 = st.columns([1, 3])
+        # Calculate Non-Unique / Duplicate GSPS numbers
+        non_unique_gsps = {g: count for g, count in gsps_frequency.items() if count > 1}
+        unique_gsps_count = len(gsps_frequency)
+
+        m_col1, m_col2 = st.columns([1.2, 2.8])
         with m_col1:
             st.metric(label="Total Active GSPS Records", value=len(active_raw_rows))
-            st.metric(label="Unique GSPS Numbers", value=len(unique_gsps_set))
+            st.metric(label="Unique GSPS Numbers", value=unique_gsps_count)
+            st.metric(label="Non-Unique (Duplicate) GSPS Count", value=len(non_unique_gsps))
+
+            if non_unique_gsps:
+                with st.expander("⚠️ View Non-Unique GSPS Numbers"):
+                    for g, count in non_unique_gsps.items():
+                        st.write(f"• **{g}** (Appears {count} times)")
+            else:
+                st.success("✨ All GSPS numbers are unique.")
 
         with m_col2:
             chart_df = pd.DataFrame(list(region_count_data.items()), columns=["Allowed Region", "GSPS Count"])
