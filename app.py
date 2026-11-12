@@ -778,7 +778,7 @@ def render_reports_tab():
         filtered_report_rows.append((noc, dt, org, val, gsps, reg, noc_copy))
 
     if filtered_report_rows:
-        # --- PIE CHART VISUALIZATION ---
+        # --- BAR GRAPH VISUALIZATION ---
         st.markdown("---")
         st.write("### 📊 Allowed Region Distribution (GSPS Count)")
         
@@ -789,16 +789,17 @@ def render_reports_tab():
         
         chart_df = pd.DataFrame(list(region_count_data.items()), columns=["Allowed Region", "GSPS Count"])
         
-        fig = px.pie(
+        fig = px.bar(
             chart_df, 
-            names="Allowed Region", 
-            values="GSPS Count", 
+            x="Allowed Region", 
+            y="GSPS Count", 
+            text="GSPS Count",
             title="GSPS Numbers Distribution by Allowed Region",
-            hole=0.35,
+            color="Allowed Region",
             color_discrete_sequence=px.colors.qualitative.Bold
         )
-        fig.update_traces(textposition='inside', textinfo='percent+label')
-        fig.update_layout(margin=dict(t=40, b=10, l=10, r=10), height=380)
+        fig.update_traces(textposition='outside')
+        fig.update_layout(margin=dict(t=40, b=10, l=10, r=10), height=380, showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
         st.markdown("---")
 
