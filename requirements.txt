@@ -1,6 +1,6 @@
 streamlit
 pandas
-psycopg
+psycopg2-binary
 reportlab
 supabase
 python-dateutil
