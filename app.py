@@ -457,7 +457,6 @@ def render_entry_tab():
 
     st.subheader("Record Entry & Management")
 
-    # --- TWO-ROW FORMAT: HEADING ON RIGHT, INPUT FIELD ON LEFT (WITHOUT TEXT LABELS) ---
     with st.container():
         # Row 1: MHA NOC Number & NOC Date
         r1_col1, r1_col2 = st.columns(2)
@@ -642,7 +641,6 @@ def render_entry_tab():
                 if check_duplicate(clean_noc_num, noc_date, single_gsps, clean_region, exclude_id=target_id):
                     st.error("Another active record with these details (NOC, Date, GSPS, Region) already exists!")
                 else:
-                    # Determine the new file path during update
                     final_pdf_path = active_file_path
                     if remove_attachment:
                         final_pdf_path = ""
@@ -657,13 +655,11 @@ def render_entry_tab():
                         final_pdf_path = upload_file_to_supabase(uploaded_file, filename)
                         st.session_state["f_pdf"] = final_pdf_path
 
-                    # Update current target record
                     cursor.execute(
                         "UPDATE n_records SET mha_noc_number = %s, mha_noc_date = %s, organisation = %s, validity = %s, gsps_number = %s, allowed_region = %s, mha_noc_copy = %s, modified_by = %s WHERE record_id = %s",
                         (clean_noc_num, noc_date, clean_org, validity_str, single_gsps, clean_region, final_pdf_path, st.session_state.name, target_id)
                     )
                     
-                    # Synchronize attachment and validity across all matching records with the same NOC details
                     cursor.execute(
                         "UPDATE n_records SET mha_noc_copy = %s, validity = %s WHERE UPPER(mha_noc_number) = %s AND mha_noc_date = %s AND UPPER(organisation) = %s AND status = 'ACTIVE'",
                         (final_pdf_path, validity_str, clean_noc_num, noc_date, clean_org)
@@ -685,8 +681,11 @@ def render_entry_tab():
     all_rows = cursor.fetchall()
 
     filtered_data = []
+    seen_ids = set()
     for r in all_rows:
         r_id, noc, dt, org_name, val, gsps, reg, noc_copy, creator, modifier = r
+        if r_id in seen_ids:
+            continue
         if search_query and not any(search_query.lower() in str(val).lower() for val in r):
             continue
         if filter_from and validate_date(filter_from):
@@ -696,6 +695,7 @@ def render_entry_tab():
             if datetime.strptime(dt, "%d.%m.%Y") > datetime.strptime(filter_to, "%d.%m.%Y"):
                 continue
         
+        seen_ids.add(r_id)
         expired_flag = "⚠️ Expired" if is_expired(dt, val) else "Active"
         pdf_display = "📄 Attached" if noc_copy else "No File"
         filtered_data.append({
@@ -742,24 +742,42 @@ def render_reports_tab():
     rc1, rc2, rc3, rc4, rc5 = st.columns(5)
     with rc1: rep_start = st.text_input("Start Date (DD.MM.YYYY)", placeholder="Optional", key="r_start")
     with rc2: rep_end = st.text_input("End Date (DD.MM.YYYY)", placeholder="Optional", key="r_end")
-    with rc3: rep_reg = st.text_input("Allowed Region Filter", placeholder="Optional", key="r_reg")
+    with rc3: rep_reg = st.text_input("Allowed Region Filter (e.g. North, South)", placeholder="Comma separated...", key="r_reg")
     with rc4: rep_noc = st.text_input("MHA NOC Filter", placeholder="Optional", key="r_noc")
     with rc5: rep_org = st.text_input("Organisation Filter", placeholder="Optional", key="r_org")
 
-    cursor.execute("SELECT mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, mha_noc_copy FROM n_records WHERE status = 'ACTIVE' ORDER BY mha_noc_number, mha_noc_date")
+    cursor.execute("SELECT record_id, mha_noc_number, mha_noc_date, organisation, validity, gsps_number, allowed_region, mha_noc_copy FROM n_records WHERE status = 'ACTIVE' ORDER BY mha_noc_number, mha_noc_date")
     report_rows = cursor.fetchall()
 
     filtered_report_rows = []
+    seen_report_ids = set()
+
+    # Parse comma-separated region filters
+    region_terms = [t.strip().lower() for t in rep_reg.split(",") if t.strip()] if rep_reg else []
+
     for r in report_rows:
-        noc, dt, org, val, gsps, reg, noc_copy = r
-        if rep_reg and rep_reg.lower() not in reg.lower(): continue
+        r_id, noc, dt, org, val, gsps, reg, noc_copy = r
+        
+        # Deduplication check
+        if r_id in seen_report_ids:
+            continue
+
         if rep_noc and rep_noc.upper() not in noc.upper(): continue
         if rep_org and rep_org.upper() not in org.upper(): continue
+        
+        # Multiple comma-separated region filtering check
+        if region_terms:
+            matched_region = any(term in reg.lower() for term in region_terms)
+            if not matched_region:
+                continue
+
         if rep_start and validate_date(rep_start):
             if datetime.strptime(dt, "%d.%m.%Y") < datetime.strptime(rep_start, "%d.%m.%Y"): continue
         if rep_end and validate_date(rep_end):
             if datetime.strptime(dt, "%d.%m.%Y") > datetime.strptime(rep_end, "%d.%m.%Y"): continue
-        filtered_report_rows.append(r)
+            
+        seen_report_ids.add(r_id)
+        filtered_report_rows.append((noc, dt, org, val, gsps, reg, noc_copy))
 
     if filtered_report_rows:
         grouped_data = {}
