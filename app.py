@@ -6,6 +6,7 @@ from dateutil.relativedelta import relativedelta
 import streamlit as st
 import pandas as pd
 import psycopg
+import plotly.express as px
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -742,7 +743,7 @@ def render_reports_tab():
     rc1, rc2, rc3, rc4, rc5 = st.columns(5)
     with rc1: rep_start = st.text_input("Start Date (DD.MM.YYYY)", placeholder="Optional", key="r_start")
     with rc2: rep_end = st.text_input("End Date (DD.MM.YYYY)", placeholder="Optional", key="r_end")
-    with rc3: rep_reg = st.text_input("Allowed Region Filter (e.g. North, South)", placeholder="Comma separated...", key="r_reg")
+    with rc3: rep_reg = st.text_input("Allowed Region Filter", placeholder="e.g. North, South", key="r_reg")
     with rc4: rep_noc = st.text_input("MHA NOC Filter", placeholder="Optional", key="r_noc")
     with rc5: rep_org = st.text_input("Organisation Filter", placeholder="Optional", key="r_org")
 
@@ -752,20 +753,16 @@ def render_reports_tab():
     filtered_report_rows = []
     seen_report_ids = set()
 
-    # Parse comma-separated region filters
     region_terms = [t.strip().lower() for t in rep_reg.split(",") if t.strip()] if rep_reg else []
 
     for r in report_rows:
         r_id, noc, dt, org, val, gsps, reg, noc_copy = r
-        
-        # Deduplication check
         if r_id in seen_report_ids:
             continue
 
         if rep_noc and rep_noc.upper() not in noc.upper(): continue
         if rep_org and rep_org.upper() not in org.upper(): continue
         
-        # Multiple comma-separated region filtering check
         if region_terms:
             matched_region = any(term in reg.lower() for term in region_terms)
             if not matched_region:
@@ -780,6 +777,30 @@ def render_reports_tab():
         filtered_report_rows.append((noc, dt, org, val, gsps, reg, noc_copy))
 
     if filtered_report_rows:
+        # --- PIE CHART VISUALIZATION ---
+        st.markdown("---")
+        st.write("### 📊 Allowed Region Distribution (GSPS Count)")
+        
+        region_count_data = {}
+        for r in filtered_report_rows:
+            reg = r[5].strip()
+            region_count_data[reg] = region_count_data.get(reg, 0) + 1
+        
+        chart_df = pd.DataFrame(list(region_count_data.items()), columns=["Allowed Region", "GSPS Count"])
+        
+        fig = px.pie(
+            chart_df, 
+            names="Allowed Region", 
+            values="GSPS Count", 
+            title="GSPS Numbers Distribution by Allowed Region",
+            hole=0.35,
+            color_discrete_sequence=px.colors.qualitative.Bold
+        )
+        fig.update_traces(textposition='inside', textinfo='percent+label')
+        fig.update_layout(margin=dict(t=40, b=10, l=10, r=10), height=380)
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown("---")
+
         grouped_data = {}
         for r in filtered_report_rows:
             noc, dt, org, val, gsps, reg, noc_copy = r
