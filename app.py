@@ -6,6 +6,7 @@ from dateutil.relativedelta import relativedelta
 import streamlit as st
 import pandas as pd
 import psycopg2
+import bcrypt
 import plotly.express as px
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -25,7 +26,6 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* Prevent layout shifting and smooth out re-renders */
     .stApp {
         animation: fadeIn 0.25s ease-in-out;
     }
@@ -34,7 +34,6 @@ st.markdown(
         to { opacity: 1; }
     }
     
-    /* Stabilize tab bar container alignment */
     [data-testid="stTabs"] {
         margin-top: 0px !important;
     }
@@ -55,7 +54,6 @@ st.markdown(
         color: white !important;
     }
 
-    /* Disable clicks on the entire drag-and-drop dropzone box/row */
     [data-testid="stFileUploader"] section {
         pointer-events: none !important;
         background-color: transparent !important;
@@ -63,7 +61,6 @@ st.markdown(
         padding: 0px !important;
         min-height: unset !important;
     }
-    /* Enable clicks strictly on the inner browse/upload button */
     [data-testid="stFileUploader"] section button {
         pointer-events: auto !important;
         background-color: #1f538d !important;
@@ -71,28 +68,24 @@ st.markdown(
         border-radius: 4px !important;
         padding: 0.35rem 0.75rem !important;
         border: none !important;
-        font-size: 0px !important; /* Hide original text/icon */
+        font-size: 0px !important;
     }
     [data-testid="stFileUploader"] section button:hover {
         background-color: #163d6b !important;
         color: white !important;
     }
-    /* Inject custom text "UPLOAD" onto the button */
     [data-testid="stFileUploader"] section button::after {
         content: "📁 UPLOAD" !important;
         font-size: 13px !important;
         font-weight: bold !important;
         color: white !important;
     }
-    /* Hide markdown container text */
     [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] {
         display: none !important;
     }
-    /* Completely hide default size limit message */
     [data-testid="stFileUploader"] small {
         display: none !important;
     }
-    /* Style form/action buttons blue */
     div.stButton > button {
         background-color: #1f538d !important;
         color: white !important;
@@ -102,7 +95,6 @@ st.markdown(
         background-color: #163d6b !important;
         color: white !important;
     }
-    /* Color data table / editor headers blue */
     [data-testid="stDataEditor"] [role="columnheader"] {
         background-color: #1f538d !important;
         color: white !important;
@@ -183,12 +175,33 @@ if "p_entry" not in user_cols:
 if "status" not in user_cols:
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ACTIVE'")
 
+# --- SECURITY & PASSWORD HELPERS ---
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def verify_password(password: str, hashed: str) -> bool:
+    try:
+        # Check if stored password is already a bcrypt hash
+        if hashed.startswith('$2b$') or hashed.startswith('$2a$'):
+            return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+        # Fallback support if legacy plain-text exists in DB
+        else:
+            if password.strip() == hashed.strip():
+                # Auto-upgrade plaintext to secure hash on successful login
+                new_hashed = hash_password(password)
+                cursor.execute("UPDATE users SET password = %s WHERE password = %s", (new_hashed, hashed))
+                return True
+            return False
+    except Exception:
+        return False
+
 # Insert default admin user if table is empty
 cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'ADMIN'")
 if cursor.fetchone()[0] == 0:
+    default_admin_hash = hash_password("admin123")
     cursor.execute(
         "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users, status) VALUES (%s, %s, %s, %s, 1, 1, 1, 1, 'ACTIVE')",
-        ("Administrator", "ADMIN", "admin123", "Administrator"),
+        ("Administrator", "ADMIN", default_admin_hash, "Administrator"),
     )
 else:
     cursor.execute(
@@ -252,9 +265,9 @@ if not st.session_state.logged_in:
                 submit = st.form_submit_button("Login", use_container_width=True)
                 
                 if submit:
-                    cursor.execute("SELECT name, role, username, p_entry, p_reports, p_trash, p_users, status FROM users WHERE username = %s AND password = %s", (uname, pwd.strip()))
+                    cursor.execute("SELECT name, role, username, p_entry, p_reports, p_trash, p_users, status, password FROM users WHERE username = %s", (uname,))
                     user = cursor.fetchone()
-                    if user:
+                    if user and verify_password(pwd.strip(), user[8]):
                         if user[7] != 'ACTIVE':
                             st.error("⚠️ Your account is inactive. Please contact the administrator.")
                         else:
@@ -310,8 +323,9 @@ if not st.session_state.logged_in:
                     else:
                         cursor.execute("SELECT user_id, name, password FROM users WHERE username = %s", (f_uname,))
                         db_user = cursor.fetchone()
-                        if db_user and db_user[1].strip().lower() == f_name.lower() and db_user[2].strip() == old_pwd.strip():
-                            cursor.execute("UPDATE users SET password = %s WHERE username = %s", (new_reset_pwd.strip(), f_uname))
+                        if db_user and db_user[1].strip().lower() == f_name.lower() and verify_password(old_pwd.strip(), db_user[2]):
+                            new_hashed_pwd = hash_password(new_reset_pwd.strip())
+                            cursor.execute("UPDATE users SET password = %s WHERE username = %s", (new_hashed_pwd, f_uname))
                             st.success("✅ Password updated successfully! Please log in with your new password.")
                             st.session_state.show_forgot_password = False
                             st.rerun()
@@ -1048,7 +1062,7 @@ def render_users_tab():
                     "Full Name": ur[1],
                     "Username": ur[2],
                     "Role": ur[3],
-                    "Password": ur[4]
+                    "Password Hash": ur[4]
                 })
             st.dataframe(pd.DataFrame(admin_user_data), hide_index=True, use_container_width=True)
             st.markdown("---")
@@ -1075,7 +1089,8 @@ def render_users_tab():
                 elif new_pwd != confirm_pwd:
                     st.error("Passwords do not match!")
                 else:
-                    cursor.execute("UPDATE users SET password = %s WHERE username = %s", (new_pwd.strip(), target_uname))
+                    new_hashed_pwd = hash_password(new_pwd.strip())
+                    cursor.execute("UPDATE users SET password = %s WHERE username = %s", (new_hashed_pwd, target_uname))
                     st.toast(f"Password for username '{target_uname}' updated successfully!", icon="🔒")
 
     st.markdown("---")
@@ -1108,9 +1123,10 @@ def render_users_tab():
                         if new_role == "Administrator":
                             p_users = True
 
+                        hashed_new_pwd = hash_password(new_pwd.strip())
                         cursor.execute(
                             "INSERT INTO users (name, username, password, role, p_entry, p_reports, p_trash, p_users, status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'ACTIVE')",
-                            (new_name.strip(), clean_uname, new_pwd.strip(), new_role, int(p_entry), int(p_reports), int(p_trash), int(p_users))
+                            (new_name.strip(), clean_uname, hashed_new_pwd, new_role, int(p_entry), int(p_reports), int(p_trash), int(p_users))
                         )
                         st.toast(f"User '{clean_uname}' created successfully!", icon="✅")
                         st.session_state["new_user_counter"] += 1
