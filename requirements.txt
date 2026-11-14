@@ -6,3 +6,4 @@ supabase
 python-dateutil
 openpyxl
 plotly
+bcrypt
